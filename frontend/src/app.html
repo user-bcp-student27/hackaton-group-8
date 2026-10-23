@@ -1,0 +1,210 @@
+<div class="demo-strip"><span class="live-dot"></span> ENTORNO DE DEMOSTRACIÓN <span class="strip-detail">· Datos sintéticos · Sin dinero real · Perú</span></div>
+
+@if (!ready()) {
+  <main class="loading"><div class="brand-mark">i</div><h1>Preparando tu wallet…</h1></main>
+} @else if (!user()) {
+  <main class="welcome">
+    <section class="welcome-story">
+      <a class="brand" href="/" aria-label="Inti inicio"><span class="brand-mark">i</span> inti<span class="brand-period">.</span></a>
+      <div class="welcome-copy"><span class="eyebrow light">HECHO PARA TU DÍA A DÍA</span><h1>Tu dinero.<br>Más simple.<br><span>Más cerca.</span></h1>
+        <p>Del cafecito de la mañana al pago entre amigos. Una wallet que te acompaña, sin complicarte.</p>
+        <div class="welcome-tags"><span>Pagos por alias</span><span>QR para comercios</span><span>Control en cada paso</span></div>
+      </div>
+      <div class="welcome-bottom">Diseñada para Perú <span>PE · PEN</span></div>
+      <div class="sun-orbit" aria-hidden="true"></div>
+    </section>
+    <section class="welcome-form">
+      <span class="eyebrow">BIENVENIDO A INTI</span><h2>Un buen día empieza<br>con todo bajo control.</h2>
+      <p class="muted">Explora la experiencia con un perfil de prueba.<br>Tu sesión y tus operaciones se guardan localmente.</p>
+      @if (error()) { <div class="alert error" role="alert">{{ error() }}</div> }
+      <div class="profile-list">
+        <button class="profile" (click)="login('demo-ana')" [disabled]="busy()"><span class="avatar lime">AT</span><span><strong>Ana Torres</strong><small>Quiero pagar · ana.demo</small></span><span class="arrow">↗</span></button>
+        <button class="profile" (click)="login('demo-luis')" [disabled]="busy()"><span class="avatar peach">LR</span><span><strong>Luis Ramos</strong><small>Quiero recibir · luis.demo</small></span><span class="arrow">↗</span></button>
+        <button class="profile" (click)="login('demo-merchant')" [disabled]="busy()"><span class="avatar blue">CM</span><span><strong>Café Miraflores</strong><small>Soy comercio · cobros con QR</small></span><span class="arrow">↗</span></button>
+        <button class="profile" (click)="login('demo-ops')" [disabled]="busy()"><span class="avatar neutral">OP</span><span><strong>Operaciones</strong><small>Conciliación · soporte · métricas</small></span><span class="arrow">↗</span></button>
+      </div>
+      <div class="divider"><span>o empieza desde cero</span></div>
+      <button class="primary full" (click)="startOnboarding()" [disabled]="busy()">Crear mi wallet de prueba <span>→</span></button>
+      <details><summary>¿Ya creaste una wallet de prueba?</summary><form (ngSubmit)="loginAlias()"><label for="returning-alias">Alias de tu wallet sintética</label><input id="returning-alias" name="returningAlias" [(ngModel)]="returningAlias" required pattern="[a-z][a-z0-9.]{2,29}" placeholder="maria.demo"><button class="secondary full" type="submit" [disabled]="busy()">Recuperar wallet por alias</button></form><p class="fine-print">Acceso simulado sin contraseña. Solo para datos ficticios en esta máquina.</p></details>
+      <p class="fine-print">Identidad, KYC y proveedores son simulados. No ingreses información personal ni credenciales reales.</p>
+    </section>
+  </main>
+} @else {
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="Inti inicio"><span class="brand-mark">i</span> inti<span class="brand-period">.</span></a>
+      <span class="nav-label">TU ESPACIO</span>
+      <nav aria-label="Navegación principal">
+        @if (user()?.role !== 'OPS') {
+          <button [class.active]="view() === 'home'" (click)="navigate('home')"><span class="nav-icon">▦</span> Mi wallet <span class="nav-dot"></span></button>
+          @if (user()?.role === 'PAYER' && user()?.status === 'ACTIVE') {
+            <button [class.active]="view() === 'pay'" (click)="navigate('pay')"><span class="nav-icon">↗</span> Enviar dinero</button>
+          }
+          @if (user()?.role === 'MERCHANT') {
+            <button [class.active]="view() === 'merchant'" (click)="navigate('merchant')"><span class="nav-icon">▣</span> Mi comercio</button>
+          }
+        }
+        <button [class.active]="view() === 'history'" (click)="navigate('history')"><span class="nav-icon">≡</span> Movimientos</button>
+        @if (user()?.role === 'OPS') {
+          <button [class.active]="view() === 'operations'" (click)="navigate('operations')"><span class="nav-icon">◈</span> Operaciones</button>
+          <button [class.active]="view() === 'metrics'" (click)="loadMetrics()" [disabled]="busy()"><span class="nav-icon">▥</span> Métricas MVP</button>
+        }
+      </nav>
+      <div class="sidebar-help"><span class="sparkle">✳</span><strong>Un poco de ayuda,<br>cuando la necesitas.</strong><p>Tu guía para entender<br>cada movimiento.</p><button (click)="askAgent('Ayúdame con mi wallet')">Conoce a Inti Guía ↗</button></div>
+      <div class="sidebar-footer"><span class="tiny-lock">◉</span> Control local, de principio a fin.<small>Wallet MVP · v1.0</small></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar"><div><span class="breadcrumb">PERSONAL /</span> {{ user()?.role === 'OPS' ? 'Centro de operaciones' : user()?.role === 'MERCHANT' ? 'Cuenta comercio' : 'Mi cuenta' }}</div>
+        <div class="topbar-right"><span class="country">PE <span>· PEN</span></span><span class="avatar small">{{ personName().slice(0, 1) }}</span><div class="topbar-name"><strong>{{ user()?.name }}</strong><small>{{ user()?.alias }}</small></div><button class="icon-button" (click)="logout()" [disabled]="busy()" aria-label="Cerrar sesión" title="Cerrar sesión">⇥</button></div>
+      </header>
+      <main class="content">
+        @if (error()) { <div class="alert error" role="alert">{{ error() }}<button (click)="error.set('')" aria-label="Cerrar error">×</button></div> }
+        @if (notice()) { <div class="alert success" role="status">{{ notice() }}<button (click)="notice.set('')" aria-label="Cerrar aviso">×</button></div> }
+        @if (busy()) { <div class="progress-bar" role="status" aria-label="Procesando operación"></div> }
+
+        @if (registering()) {
+          <section class="onboarding card">
+            <span class="eyebrow">TU PRIMER PASO</span><h1>Tu wallet, en pocos minutos.</h1><p class="muted">Solo datos ficticios. No necesitas documentos ni cuentas bancarias.</p>
+            <ol class="steps" aria-label="Progreso del registro"><li [class.current]="step() === 1" [class.done]="step() > 1">1 <span>Identidad</span></li><li [class.current]="step() === 2" [class.done]="step() > 2">2 <span>Consentimiento</span></li><li [class.current]="step() === 3">3 <span>Validación mock</span></li></ol>
+            <form (ngSubmit)="step() < 3 ? nextStep() : finishOnboarding()">
+              @if (step() === 1) {
+                <label for="name">Nombre ficticio</label><input id="name" name="name" [(ngModel)]="name" required minlength="3" maxlength="80" placeholder="Ej. María Demo" aria-describedby="synthetic-hint">
+                <label for="alias">Tu alias</label><input id="alias" name="alias" [(ngModel)]="alias" required pattern="[a-z][a-z0-9.]{2,29}" maxlength="30" placeholder="maria.demo"><small>3–30 caracteres. Letras minúsculas, números y puntos.</small>
+                <label for="phone">Celular ficticio</label><input id="phone" name="phone" [(ngModel)]="phone" required pattern="9[0-9]{8}" maxlength="9" inputmode="numeric" placeholder="900000010">
+                <small id="synthetic-hint">Usa un nombre y celular inventados, nunca datos reales.</small>
+              } @else if (step() === 2) {
+                <div class="info-box"><h3>Una demo, sin letra pequeña.</h3><p>La identidad, el KYC y los pagos externos son simulados. El saldo de S/ 500 no tiene valor monetario.</p><p>Los datos se almacenan en esta máquina para demostrar los flujos. No conectamos bancos.</p></div>
+                <label class="check-label"><input type="checkbox" name="consent" [(ngModel)]="consent" required> Acepto usar exclusivamente datos sintéticos en esta demostración.</label>
+              } @else {
+                <label for="kyc">Resultado del KYC simulado</label><select id="kyc" name="kyc" [(ngModel)]="kyc"><option value="APPROVED">Aprobado · activar wallet</option><option value="PENDING">Pendiente · revisión humana</option><option value="DECLINED">Rechazado · no activar</option></select>
+                <p class="info-box">Este control reproduce una respuesta de identidad. No verifica documentos ni representa cumplimiento regulatorio real.</p>
+                <div class="review-line"><span>Tu alias</span><strong>{{ alias }}</strong></div><div class="review-line"><span>Saldo de prueba si se aprueba</span><strong>S/ 500.00</strong></div>
+              }
+              <div class="button-row">@if (step() > 1) { <button type="button" class="secondary" (click)="previousStep()" [disabled]="busy()">Atrás</button> }<button class="primary" type="submit" [disabled]="busy()">{{ step() < 3 ? 'Continuar →' : 'Finalizar registro' }}</button></div>
+            </form>
+          </section>
+        } @else if (user()?.status !== 'ACTIVE') {
+          <section class="card empty-state"><span class="empty-icon">◷</span><h1>{{ user()?.status === 'PENDING' ? 'Tu validación está pendiente.' : 'No pudimos activar tu wallet.' }}</h1><p>{{ user()?.status === 'PENDING' ? 'Un operador debe revisar el KYC mock. Tu saldo sigue en cero y los pagos están bloqueados.' : 'El proveedor de identidad simulado rechazó la validación. Contacta a soporte para conocer los siguientes pasos.' }}</p><button class="secondary" (click)="askAgent('Ayuda con onboarding')">Consultar a Inti Guía</button><button class="text-button" (click)="refreshQuietly()">Consultar estado</button></section>
+        } @else {
+          @switch (view()) {
+            @case ('home') {
+              <div class="page-heading"><div><span class="eyebrow">LO COTIDIANO, MÁS SIMPLE</span><h1>Hola, {{ personName() }} <span class="wave">✳</span></h1><p>Un vistazo a tu dinero. Todo en su lugar.</p></div><div class="date-chip"><span class="live-dot"></span> Tu wallet está activa</div></div>
+              <div class="dashboard-grid">
+                <section class="balance-card"><div class="balance-top"><span>SALDO DISPONIBLE</span><span class="wallet-chip">INTI WALLET</span></div><div class="balance-amount">{{ money(user()?.balance) }}</div><p>Soles peruanos <span>·</span> Dinero de prueba</p><div class="balance-bottom"><span class="balance-alias">{{ user()?.alias }}</span><span>PE <span class="mini-sun">✳</span></span></div><div class="balance-decoration" aria-hidden="true"></div></section>
+                <section class="card quick-card"><div class="section-title"><h2>¿Qué hacemos hoy?</h2><span class="tiny-label">ASÍ DE FÁCIL</span></div><div class="quick-actions">
+                  @if (user()?.role === 'PAYER') {
+                    <button (click)="preparePay()"><span class="action-icon lime">↗</span><strong>Enviar</strong><small>A un contacto</small></button>
+                    <label class="action-upload"><span class="action-icon lavender">▣</span><strong>Pagar QR</strong><small>Cargar archivo</small><input type="file" accept="image/png" (change)="uploadQr($event)" aria-label="Cargar QR para pagar"></label>
+                  } @else {
+                    <button (click)="navigate('merchant')"><span class="action-icon lime">▣</span><strong>Cobrar</strong><small>Generar mi QR</small></button>
+                  }
+                  <button (click)="navigate('history')"><span class="action-icon peach">≡</span><strong>Consultar</strong><small>Mis movimientos</small></button>
+                </div><div class="quick-note"><span>◉</span> Cada pago tiene una referencia única. Sin dudas.</div></section>
+                <section class="card activity-card"><div class="section-title"><h2>Últimos movimientos</h2><button class="text-button" (click)="navigate('history')">Ver todos ↗</button></div>
+                  @if (!latest().length) { <div class="empty-list"><span>↗</span><h3>Tu historia empieza aquí.</h3><p>Cuando hagas tu primer pago, lo verás en este espacio.</p></div> }
+                  @for (p of latest(); track p.id) {
+                    <button class="transaction-row" (click)="openPayment(p)"><span class="avatar" [class.peach]="p.status !== 'SUCCEEDED'">{{ p.channel === 'QR' ? '▣' : '↗' }}</span><span class="transaction-name"><strong>{{ p.payer_id === user()?.id ? p.destination_name : p.payer_name }}</strong><small>{{ date(p.created_at) }} · {{ p.channel === 'QR' ? 'Pago QR' : 'Transferencia' }}</small></span><span class="transaction-value"><strong>{{ p.payer_id === user()?.id ? '−' : '+' }} {{ money(p.amount) }}</strong><span class="badge" [attr.data-status]="p.status">{{ p.reversed ? 'Revertido' : status(p.status) }}</span></span></button>
+                  }
+                </section>
+                <section class="card summary-card"><div class="section-title"><h2>En perspectiva</h2><span>↗</span></div><span class="muted">Actividad de tu historial visible</span><div class="summary-stat"><span class="stat-icon peach">↗</span><div><small>Pagos enviados</small><strong>{{ money(paidTotal()) }}</strong></div></div><div class="summary-stat"><span class="stat-icon lime">↙</span><div><small>Pagos recibidos</small><strong>{{ money(receivedTotal()) }}</strong></div></div><div class="reserved-note">Reservado en pendientes <strong>{{ money(user()?.reserved) }}</strong></div></section>
+                <section class="tip-card"><span class="sparkle">✳</span><div><span class="eyebrow">TRANQUILIDAD EN CADA PAGO</span><h3>Si está pendiente, no lo repitas.</h3><p>Consulta el estado del mismo intento. Tu dinero está reservado hasta tener una respuesta.</p></div><button class="round-button" (click)="askAgent('Explícame los pagos pendientes')" aria-label="Aprender sobre pagos pendientes">↗</button></section>
+              </div>
+              @if (user()?.role === 'PAYER') {
+                <section class="contacts-section"><div class="section-title"><h2>Un pago, una conexión.</h2><span class="muted">Contactos disponibles</span></div><div class="contact-list">@for (contact of contacts().slice(0, 8); track contact.id) { <button class="contact" (click)="preparePay(contact)"><span class="avatar">{{ contact.name.slice(0, 2).toUpperCase() }}</span><strong>{{ contact.name }}</strong><small>{{ contact.alias }}</small></button> }</div></section>
+              }
+            }
+            @case ('pay') {
+              <div class="page-heading"><div><span class="eyebrow">SIN VUELTAS</span><h1>Un pago, y listo.</h1><p>Revisa el destino. Confirma el monto. Nosotros llevamos la cuenta.</p></div><span class="date-chip">Alias ≤ S/ 200 · QR ≤ S/ 150</span></div>
+              <div class="two-columns">
+                <section class="card payment-form">
+                  @if (attempt()) {
+                    <span class="eyebrow">INTENTO PROTEGIDO</span><h2>Consulta antes de repetir.</h2><p>La misma clave recupera el pago original. Aunque se haya perdido la respuesta, no se vuelve a cobrar.</p><div class="info-box"><small>Clave de idempotencia</small><code>{{ attempt()?.key }}</code><p>{{ money(attempt()?.input?.amount) }} → {{ attempt()?.input?.destination }}</p></div>
+                    <button class="primary full" (click)="confirmPayment()" [disabled]="busy()">Consultar mismo intento</button><button class="secondary full" (click)="closeAttempt()" [disabled]="busy()">Cerrar intento terminal y preparar otro</button><p class="fine-print">Los intentos pendientes no pueden cerrarse hasta recibir una respuesta.</p>
+                  } @else if (reviewing()) {
+                    <span class="eyebrow">ANTES DE CONFIRMAR</span><h2>¿Está todo correcto?</h2><div class="payment-review"><span class="avatar large lime">{{ destinationContact()?.name?.slice(0, 2)?.toUpperCase() }}</span><h3>{{ destinationContact()?.name }}</h3><p>{{ destination }}</p><strong class="review-amount">{{ money(+amount.replace(',', '.') * 100) }}</strong></div><div class="review-line"><span>Canal</span><strong>{{ channel === 'QR' ? 'QR comercio' : 'Alias' }}</strong></div><div class="review-line"><span>Proveedor simulado</span><strong>{{ scenario }}</strong></div><div class="button-row"><button class="secondary" (click)="reviewing.set(false)" [disabled]="busy()">Corregir</button><button class="primary" (click)="confirmPayment()" [disabled]="busy()">Confirmar pago</button></div>
+                  } @else {
+                    <h2>{{ scanned() ? 'QR leído correctamente' : '¿A quién le enviamos?' }}</h2>
+                    <form (ngSubmit)="reviewPayment()">
+                      <label for="destination">Destino</label><select id="destination" name="destination" [(ngModel)]="destination" [disabled]="channel === 'QR'" required><option value="">Selecciona un contacto</option>@for (c of contacts(); track c.id) { <option [value]="c.alias">{{ c.name }} · {{ c.alias }}</option> }</select>
+                      <label for="amount">Monto en soles</label><div class="money-input"><span>S/</span><input id="amount" name="amount" [(ngModel)]="amount" inputmode="decimal" placeholder="0.00" required [readOnly]="channel === 'QR'"></div><small>Saldo disponible: {{ money(user()?.balance) }}</small>
+                      <label for="scenario">Escenario del proveedor mock</label><select id="scenario" name="scenario" [(ngModel)]="scenario"><option value="APPROVED">Aprobado · pago exitoso</option><option value="DECLINED">Rechazado · liberar saldo</option><option value="PENDING">Pendiente · esperar callback</option><option value="TIMEOUT">Expirado · timeout confirmado mock</option></select>
+                      @if (scanned()) { <p class="info-box">QR de {{ scanned()?.name }} · vence {{ date(scanned()!.expires_at) }}</p> }
+                      <button class="primary full" type="submit" [disabled]="busy()">Revisar pago →</button>
+                    </form>
+                  }
+                </section>
+                <aside><section class="card"><span class="sparkle">✳</span><h2>La confianza está en los detalles.</h2><ul class="feature-list"><li>Confirma nombre y monto antes de enviar.</li><li>Los reintentos usan la misma clave.</li><li>Tu comprobante queda en movimientos.</li><li>Un pendiente no es un pago confirmado.</li></ul></section><section class="card qr-upload-card"><h3>¿Tienes un QR de comercio?</h3><p class="muted">Carga el PNG generado desde el perfil de comercio.</p><label class="upload-button">Seleccionar QR PNG<input type="file" accept="image/png" (change)="uploadQr($event)" [disabled]="busy()" aria-label="Seleccionar QR PNG"></label></section></aside>
+              </div>
+            }
+            @case ('history') {
+              <div class="page-heading"><div><span class="eyebrow">CADA MOVIMIENTO CUENTA</span><h1>Tu actividad, clara.</h1><p>Estados en vivo, referencias únicas y comprobantes.</p></div><button class="secondary" (click)="filterHistory()" [disabled]="busy()">↻ Actualizar</button></div>
+              <section class="card"><form class="filter-bar" (ngSubmit)="filterHistory()"><div><label for="filter-date">Fecha (Perú)</label><input id="filter-date" type="date" name="date" [(ngModel)]="filterDate"></div><div class="grow"><label for="filter-reference">Referencia</label><input id="filter-reference" name="reference" [(ngModel)]="filterReference" maxlength="50" placeholder="Buscar transacción…"></div><div><label for="filter-channel">Canal</label><select id="filter-channel" name="channel" [(ngModel)]="filterChannel"><option value="">Todos</option><option value="ALIAS">Alias</option><option value="QR">QR</option></select></div><button class="primary" type="submit" [disabled]="busy()">Filtrar</button></form>
+                <div class="table-scroll"><table><thead><tr><th>Operación</th><th>Referencia / fecha</th><th>Monto</th><th>Estado</th><th></th></tr></thead><tbody>@for (p of payments(); track p.id) { <tr><td><strong>{{ p.destination_name }}</strong><small>{{ p.payer_name }} → {{ p.channel }}</small></td><td><code>{{ p.id.slice(0, 8) }}</code><small>{{ date(p.created_at) }}</small></td><td class="nowrap">{{ money(p.amount) }}</td><td><span class="badge" [attr.data-status]="p.status">{{ p.reversed ? 'Revertido' : status(p.status) }}</span></td><td><button class="text-button" (click)="openPayment(p)" [disabled]="busy()">Detalle ↗</button></td></tr> } @empty { <tr><td colspan="5" class="empty-list">No hay movimientos para estos filtros.</td></tr> }</tbody></table></div><p class="fine-print">Hasta 200 movimientos recientes por consulta. Fecha y hora de Perú. Actualización cada 5 segundos.</p>
+              </section>
+            }
+            @case ('merchant') {
+              <div class="page-heading"><div><span class="eyebrow">TU NEGOCIO NO SE DETIENE</span><h1>Cobra con confianza.</h1><p>Un QR para cobrar. Un estado claro para entregar.</p></div><span class="date-chip">{{ user()?.name }}</span></div>
+              <div class="two-columns"><section class="card"><h2>Genera tu QR de prueba</h2><p class="muted">Válido por 15 minutos. El monto y comercio se verifican en el servidor.</p><form (ngSubmit)="makeQr()"><label for="qr-amount">Monto a cobrar (S/)</label><input id="qr-amount" name="qrAmount" [(ngModel)]="qrAmount" inputmode="decimal" required><button class="primary full" type="submit" [disabled]="busy()">Generar QR</button></form>
+                  @if (qr(); as code) { <div class="qr-preview"><img [src]="code.image" alt="QR de cobro del comercio" width="260" height="260"><strong>{{ money(code.amount) }}</strong><span>{{ code.name }}</span><small>Vence {{ date(code.expires_at) }}</small><a class="secondary" [href]="code.image" download="inti-qr.png">Descargar QR PNG</a><code>{{ code.id }}</code></div> }
+                </section><section class="card"><div class="section-title"><h2>Intentos de cobro</h2><span class="live-label"><span class="live-dot"></span> En vivo</span></div><p class="muted">Entrega solo cuando el estado sea exitoso.</p>
+                  @for (p of payments(); track p.id) { <button class="transaction-row" (click)="openPayment(p)"><span class="avatar">▣</span><span class="transaction-name"><strong>{{ p.payer_name }}</strong><small>{{ p.id.slice(0, 8) }} · {{ p.channel }}</small></span><span class="transaction-value"><strong>{{ money(p.amount) }}</strong><span class="badge" [attr.data-status]="p.status">{{ p.reversed ? 'Revertido' : status(p.status) }}</span></span></button> } @empty { <div class="empty-list">Aún no tienes intentos de cobro.</div> }
+                  <button class="text-button" (click)="navigate('history')">Filtrar por fecha y referencia ↗</button></section></div>
+            }
+            @case ('operations') {
+              <div class="page-heading"><div><span class="eyebrow">CONTROL DE PRINCIPIO A FIN</span><h1>Centro de operaciones.</h1><p>Conciliación real. Proveedores simulados. Decisiones humanas.</p></div><button class="secondary" (click)="filterHistory()" [disabled]="busy()">↻ Actualizar</button></div>
+              <section class="card"><div class="section-title"><h2>Conciliación diaria</h2><span class="tiny-label">WALLET × PROVEEDOR × LEDGER</span></div><form class="filter-bar" (ngSubmit)="reconcile()"><div><label for="recon-date">Fecha Perú</label><input id="recon-date" type="date" name="reconDate" [(ngModel)]="reconDate" required></div><div><label for="recon-channel">Riel</label><select id="recon-channel" name="reconChannel" [(ngModel)]="reconChannel"><option value="">Todos</option><option value="ALIAS">Alias mock</option><option value="QR">Adquirencia QR mock</option></select></div><button class="primary" type="submit" [disabled]="busy()">Ejecutar conciliación</button></form>
+                @if (reconciliation(); as report) {
+                  <div class="metric-grid"><div><small>Operaciones</small><strong>{{ report.total }}</strong></div><div><small>Conciliadas</small><strong>{{ report.matched }}</strong></div><div><small>No conciliadas</small><strong>{{ report.unmatched }}</strong></div><div><small>Resueltas</small><strong>{{ report.resolved }}</strong></div></div>
+                  <div class="table-scroll"><table><thead><tr><th>Referencia</th><th>Wallet / proveedor</th><th>Descalces</th><th>Duplicados</th></tr></thead><tbody>@for (row of report.rows; track row.payment.id) { <tr><td><button class="text-button" (click)="openPayment(row.payment)">{{ row.payment.id.slice(0, 8) }} ↗</button><small>{{ money(row.payment.amount) }} · {{ row.payment.channel }}</small></td><td>{{ status(row.payment.status) }}<small>{{ row.provider?.status ?? 'AUSENTE' }} · {{ money(row.provider?.amount) }}</small></td><td>@for (issue of row.issues; track issue.id) { <div class="issue-line"><code>{{ issue.kind }}</code><small>{{ status(issue.status) }}</small>@if (issue.status === 'OPEN') { <button class="text-button" (click)="investigate(issue.id)" [disabled]="busy()">Investigar</button> }</div> } @empty { <span class="badge" data-status="SUCCEEDED">Coincide</span> }</td><td>{{ row.duplicate_requests }}</td></tr> } @empty { <tr><td colspan="4">No hay transacciones para el día y canal seleccionados.</td></tr> }</tbody></table></div>
+                }
+              </section>
+              <div class="two-columns section-gap"><section class="card"><h2>Revisión KYC mock</h2>@for (account of kycQueue(); track account.id) { <div class="case-item"><strong>{{ account.name }}</strong><small>{{ account.alias }}</small><div class="button-row"><button class="secondary" (click)="reviewKyc(account.id, 'APPROVED')" [disabled]="busy()">Aprobar identidad mock</button><button class="text-button danger" (click)="reviewKyc(account.id, 'DECLINED')" [disabled]="busy()">Rechazar</button></div></div> } @empty { <p class="muted">No hay altas pendientes de revisión.</p> }</section>
+                <section class="card"><h2>Soporte y aprobación humana</h2><label for="decision-note">Motivo de resolución (5–400 caracteres)</label><textarea id="decision-note" [(ngModel)]="decisionNote" maxlength="400" rows="2" placeholder="Registra el criterio de la decisión humana"></textarea>
+                  @for (support of cases(); track support.id) { <div class="case-item"><strong>{{ support.category }} <span class="badge">{{ status(support.status) }}</span></strong><small>Pago {{ support.payment_id.slice(0, 8) }} · Caso {{ support.id.slice(0, 8) }}</small><p>{{ support.note }}</p>@if (support.resolution) { <p class="muted">{{ support.resolution }}</p> } @if (support.status === 'OPEN') { <div class="button-row">@if (support.category === 'REVERSAL') { <button class="primary" (click)="decide(support, 'APPROVE_REVERSAL')" [disabled]="busy()">Aprobar reverso simulado</button> } @else { <button class="secondary" (click)="decide(support, 'RESOLVE')" [disabled]="busy()">Resolver caso</button> }<button class="text-button danger" (click)="decide(support, 'REJECT')" [disabled]="busy()">Rechazar solicitud</button></div> }</div> } @empty { <p class="muted">Sin solicitudes de soporte.</p> }
+                </section></div>
+              <section class="card section-gap"><div class="section-title"><h2>Transacciones / simulador de callbacks</h2><button class="text-button" (click)="navigate('history')">Historial filtrable ↗</button></div>@for (p of latest(); track p.id) { <button class="transaction-row" (click)="openPayment(p)"><span class="avatar">↗</span><span class="transaction-name"><strong>{{ p.payer_name }} → {{ p.destination_name }}</strong><small>{{ p.id }} · {{ p.channel }}</small></span><span class="transaction-value"><strong>{{ money(p.amount) }}</strong><span class="badge" [attr.data-status]="p.status">{{ status(p.status) }}</span></span></button> } @empty { <p class="muted">Primero crea pagos con el perfil de pagador.</p> }</section>
+              <details class="card section-gap"><summary>Auditoría · últimos 200 eventos</summary><div class="table-scroll"><table><thead><tr><th>Evento</th><th>Referencia</th><th>Correlación / solicitud</th></tr></thead><tbody>@for (item of audit(); track item.id) { <tr><td><strong>{{ item.action }}</strong><small>{{ date(item.created_at) }}</small></td><td><code>{{ item.reference_id }}</code><small>{{ item.detail }}</small></td><td><code>{{ item.correlation_id }}</code><small>{{ item.request_id }}</small></td></tr> }</tbody></table></div></details>
+            }
+            @case ('metrics') {
+              <div class="page-heading"><div><span class="eyebrow">MEDIR PARA MEJORAR</span><h1>El pulso del MVP.</h1><p>Embudo, activación y adquisición. Sin confundir objetivos con resultados.</p></div></div>
+              <section class="card"><form class="filter-bar" (ngSubmit)="loadMetrics()"><div><label for="launch-month">Mes 1 del lanzamiento</label><input id="launch-month" type="month" name="month" [(ngModel)]="month" required></div><button class="primary" type="submit" [disabled]="busy()">Ver meses 1–3</button></form>
+                @if (metrics(); as report) { <p class="info-box">{{ report.notice }}</p><div class="table-scroll"><table><thead><tr><th>Mes</th><th>Checkout</th><th>Caída / meta ≤8%</th><th>Onboarding / meta ≤180s</th><th>MAU / meta 1k–2k</th><th>Nuevos activos</th><th>CAC / meta S/ 10</th></tr></thead><tbody>@for (m of report.months; track m.month) { <tr><td>{{ m.month }}</td><td>{{ m.checkout_succeeded }} / {{ m.checkout_started }}</td><td>{{ m.dropoff_percent === null ? 'Sin datos' : (m.dropoff_percent | number:'1.1-1') + '%' }}</td><td>{{ m.onboarding_median_seconds === null ? 'Sin datos' : m.onboarding_median_seconds + ' s' }}</td><td>{{ m.mau }}</td><td>{{ m.new_active_users }}</td><td>{{ money(m.cac_cents) }}</td></tr> }</tbody></table></div> }
+                <p class="fine-print">MAU: pagadores únicos con pago exitoso por mes Perú. Checkout: al entrar en revisión; la caída incluye revisiones abandonadas. El éxito se atribuye al mes de inicio del intento, incluso con callbacks tardíos. Duración de onboarding: inicio → cierre. Las identidades presembradas no cuentan como nuevas altas.</p>
+                @for (m of metrics()?.months ?? []; track m.month) {
+                  <details><summary>{{ m.month }} · detalle de atribución por campaña</summary>
+                    <div class="table-scroll"><table><thead><tr><th>Campaña</th><th>Nuevas wallets activas</th><th>Gasto</th><th>CAC</th></tr></thead>
+                      <tbody>@for (item of m.attribution; track item.campaign) { <tr><td>{{ item.campaign }}</td><td>{{ item.new_active_users }}</td><td>{{ money(item.spend_cents) }}</td><td>{{ money(item.cac_cents) }}</td></tr> } @empty { <tr><td colspan="4">Sin activaciones ni gasto atribuido.</td></tr> }</tbody>
+                    </table></div>
+                  </details>
+                }
+              </section><section class="card section-gap"><h2>Atribución de adquisición</h2><p class="muted">El gasto se reemplaza para la combinación de mes + campaña. CAC = gasto total / nuevas wallets activadas.</p><form class="filter-bar" (ngSubmit)="saveSpend()"><div><label for="spend-month">Mes</label><input id="spend-month" type="month" name="spendMonth" [(ngModel)]="month" required></div><div><label for="campaign">Campaña</label><input id="campaign" name="campaign" [(ngModel)]="campaign" required pattern="[a-zA-Z0-9_-]{1,40}"></div><div><label for="spend">Gasto (S/)</label><input id="spend" name="spend" [(ngModel)]="spend" inputmode="decimal" required></div><button class="primary" type="submit" [disabled]="busy()">Guardar gasto</button></form>@for (cost of metrics()?.acquisition ?? []; track cost.month + cost.campaign) { <div class="review-line"><span>{{ cost.month }} · {{ cost.campaign }}</span><strong>{{ money(cost.cents) }}</strong></div> }</section>
+            }
+          }
+        }
+        <footer class="page-footer"><span>inti. <span>Un poquito más cerca.</span></span><span>Prototipo local · Sin validez financiera</span></footer>
+      </main>
+    </div>
+  </div>
+  <button class="assistant-fab" (click)="assistantOpen.set(!assistantOpen())" [attr.aria-expanded]="assistantOpen()" aria-controls="assistant-panel"><span>✳</span> Inti Guía</button>
+  @if (assistantOpen()) {
+    @if (agentPaymentId()) {
+      <div class="assistant-context">Contexto: {{ agentPaymentId()?.slice(0, 8) }} <button class="text-button" (click)="agentPaymentId.set(null); agent.set(null)">Quitar contexto</button></div>
+    }
+    <aside id="assistant-panel" class="assistant-panel" aria-label="Asistente Inti Guía"><header><div><span class="sparkle">✳</span><strong>Inti Guía</strong><small>Asistente local · solo lectura</small></div><button class="icon-button" (click)="assistantOpen.set(false)" aria-label="Cerrar asistente">×</button></header><div class="assistant-body"><p>Te ayudo a entender tu wallet. No ejecuto pagos ni apruebo reversos.</p>@if (selected()) { <span class="badge">Contexto: {{ selected()?.id?.slice(0, 8) }}</span> }@if (agent(); as reply) { <div class="agent-answer" aria-live="polite">{{ reply.message }}<small>Traza {{ reply.trace_id.slice(0, 8) }} · {{ reply.mode }}</small></div> }<div class="suggestions"><button (click)="askAgent('Explícame el estado de mi pago')" [disabled]="assistantBusy()">Entender mi pago</button><button (click)="askAgent('Cómo pagar con QR')" [disabled]="assistantBusy()">Pagar con QR</button><button (click)="askAgent('Solicitar un reverso')" [disabled]="assistantBusy()">Reversos y soporte</button></div><form (ngSubmit)="askAgent()"><label class="sr-only" for="question">Tu consulta al asistente</label><input id="question" name="question" [(ngModel)]="question" maxlength="500" required placeholder="¿En qué te ayudo?"><button class="primary" type="submit" [disabled]="assistantBusy()">{{ assistantBusy() ? '…' : '→' }}</button></form><small class="fine-print">Respuestas deterministas basadas en políticas. No es un LLM ni asesor financiero.</small></div></aside>
+  }
+  @if (selected(); as p) {
+    <div class="modal-backdrop" (click)="selected.set(null)"><section intiDialog class="receipt-modal card" role="dialog" aria-modal="true" aria-labelledby="receipt-title" tabindex="-1" (click)="$event.stopPropagation()" (keydown.escape)="selected.set(null)">
+      <div class="section-title"><span class="eyebrow">COMPROBANTE DE DEMOSTRACIÓN</span><button class="icon-button" (click)="selected.set(null)" aria-label="Cerrar comprobante">×</button></div>
+      <div class="receipt-header"><span class="receipt-icon" [attr.data-status]="p.status">{{ p.status === 'SUCCEEDED' ? '✓' : p.status === 'PENDING' ? '◷' : '!' }}</span><h2 id="receipt-title">{{ p.reversed ? 'Pago revertido (simulado)' : status(p.status) }}</h2><strong>{{ money(p.amount) }}</strong><p>{{ p.payer_name }} → {{ p.destination_name }}</p></div>
+      <div class="review-line"><span>Referencia</span><code>{{ p.id }}</code></div><div class="review-line"><span>Fecha Perú</span><strong>{{ date(p.created_at) }}</strong></div><div class="review-line"><span>Canal / motivo</span><strong>{{ p.channel }} · {{ p.reason }}</strong></div>
+      <p class="info-box">@switch (p.status) { @case ('SUCCEEDED') { {{ p.reversed ? 'El ledger incluye un reverso aprobado por un operador. El resultado original se conserva.' : 'Pago confirmado. Descarga el comprobante o solicita revisión si necesitas ayuda. No existe cancelación unilateral.' }} } @case ('PENDING') { Monto reservado. No entregues productos ni inicies otro pago hasta recibir confirmación. } @case ('FAILED') { El pago fue rechazado y se liberó la reserva. Puedes cerrar este intento y preparar otro. } @case ('EXPIRED') { El proveedor mock confirmó expiración. La reserva fue devuelta; puedes volver o iniciar un nuevo intento. } }</p>
+      <div class="button-row"><button class="secondary" (click)="downloadReceipt()">Descargar comprobante</button><button class="text-button" (click)="askAgent('Explícame este resultado')">Consultar a Inti Guía ✳</button></div>
+      <details><summary>Ledger local · {{ p.ledger?.length ?? 0 }} asientos</summary><div class="table-scroll"><table><thead><tr><th>Cuenta</th><th>Fase</th><th>Movimiento</th></tr></thead><tbody>@for (entry of p.ledger ?? []; track $index) { <tr><td><code>{{ entry.account }}</code></td><td>{{ entry.phase }}</td><td>{{ money(entry.amount) }}</td></tr> }</tbody></table></div></details>
+      <details><summary>Ayuda y revisión humana</summary><p class="fine-print">{{ p.retry_allowed ? 'Puedes reintentar con un nuevo intento tras cerrar el original.' : p.investigation_allowed ? 'Elegible para investigación; no reintentes con otra clave.' : p.dispute_allowed ? 'Elegible para disputa o solicitud de reverso con aprobación humana.' : 'Consulta el historial del caso.' }}</p><form (ngSubmit)="createCase()"><label for="case-category">Tipo de solicitud</label><select id="case-category" name="caseCategory" [(ngModel)]="caseCategory"><option value="TECHNICAL">Investigación técnica</option>@if (p.dispute_allowed) { <option value="DISPUTE">Disputa de pago ejecutado</option><option value="REVERSAL">Solicitar reverso simulado</option> }</select><label for="case-note">Describe el motivo, sin datos personales</label><textarea id="case-note" name="caseNote" [(ngModel)]="caseNote" required minlength="5" maxlength="400" rows="2"></textarea><button class="primary" type="submit" [disabled]="busy()">Enviar a soporte humano</button></form>@for (support of p.cases ?? []; track support.id) { <p class="case-item"><strong>{{ support.category }} · {{ status(support.status) }}</strong><small>{{ support.note }}</small>@if (support.resolution) { <small>Resolución: {{ support.resolution }}</small> }</p> }</details>
+      @if (user()?.role === 'OPS') {
+        <details><summary>Laboratorio del proveedor · solo demo</summary><label for="callback-outcome">Callback simulado</label><select id="callback-outcome" [(ngModel)]="callbackOutcome"><option value="APPROVED">APPROVED</option><option value="DECLINED">DECLINED</option><option value="PENDING">PENDING</option><option value="TIMEOUT">TIMEOUT</option></select><button class="secondary full" (click)="callback()" [disabled]="busy()">Enviar callback mock</button><hr><p class="fine-print">Inyectar fixtures cambia solo la fuente del proveedor para probar descalces.</p><label for="fixture-outcome">Estado del fixture</label><select id="fixture-outcome" [(ngModel)]="fixtureOutcome"><option value="APPROVED">APPROVED</option><option value="DECLINED">DECLINED</option><option value="PENDING">PENDING</option><option value="TIMEOUT">TIMEOUT</option></select><label for="fixture-amount">Monto proveedor (S/)</label><input id="fixture-amount" [(ngModel)]="fixtureAmount" inputmode="decimal"><div class="button-row"><button class="secondary" (click)="injectFixture()" [disabled]="busy()">Inyectar descalce</button><button class="text-button danger" (click)="injectFixture(true)" [disabled]="busy()">Simular ausente</button></div><button class="text-button" (click)="injectFixture(false, true)" [disabled]="busy()">Restaurar fixture consistente</button></details>
+      }
+      <p class="fine-print center">No es un comprobante bancario. Solo dinero y proveedores sintéticos.</p>
+    </section></div>
+  }
+}

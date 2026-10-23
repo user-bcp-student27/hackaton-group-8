@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "projects": {
+    "inti": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "index": "src/index.html",
+            "tsConfig": "tsconfig.json",
+            "styles": ["src/styles.css"],
+            "outputPath": "dist/inti",
+            "budgets": [
+              {"type": "initial", "maximumWarning": "650kB", "maximumError": "900kB"},
+              {"type": "anyComponentStyle", "maximumWarning": "15kB", "maximumError": "20kB"}
+            ]
+          },
+          "configurations": {
+            "production": {"outputHashing": "all"},
+            "development": {"optimization": false, "sourceMap": true}
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {"buildTarget": "inti:build:production"},
+            "development": {"buildTarget": "inti:build:development"}
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}
