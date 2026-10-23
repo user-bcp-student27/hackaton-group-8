@@ -19,7 +19,8 @@ public class WalletResource {
     @Inject Wallet wallet;
     @ConfigProperty(name = "wallet.lab.enabled", defaultValue = "false") boolean labEnabled;
     @CookieParam("wallet_session") String token;
-    public record Login(String userId) {}
+    public record Login(String userId, String pin) {}
+    public record PinSetup(String pin) {}
     public record QrInput(Long amount) {}
     public record QrImage(String image) {}
     public record KycDecision(String decision) {}
@@ -38,7 +39,7 @@ public class WalletResource {
     @GET @Path("/experience")
     public Object experience() { return Map.of("laboratory", labEnabled); }
     @POST @Path("/demo/login")
-    public Response login(Login input) { return session(wallet.login(input.userId())); }
+    public Response login(Login input) { return session(wallet.login(input.userId(), input.pin())); }
     @POST @Path("/logout")
     public Response logout() {
         wallet.logout(token);
@@ -50,14 +51,16 @@ public class WalletResource {
     public Object complete(Wallet.OnboardingComplete input) {
         if (input.kyc() != null) laboratory();
         return wallet.complete(token, new Wallet.OnboardingComplete(input.name(), input.alias(), input.phone(), input.consent(),
-                input.kyc() == null ? "APPROVED" : input.kyc()));
+            input.pin(), input.kyc() == null ? "APPROVED" : input.kyc()));
     }
     @POST @Path("/onboarding/step")
     public Object step(Wallet.OnboardingStep input) { return wallet.onboardingStep(token, input); }
     @GET @Path("/me")
     public Object me() { return wallet.me(token); }
+    @POST @Path("/profile/pin")
+    public Object setupPin(PinSetup input) { return wallet.setupLegacyPin(token, input.pin()); }
     @GET @Path("/contacts")
-    public Object contacts() { return wallet.contacts(token); }
+    public Object contacts(@QueryParam("q") String query) { return wallet.contacts(token, query); }
     @POST @Path("/checkout/start")
     public Object checkout(Wallet.CheckoutInput input) { wallet.startCheckout(token, input.attemptId()); return Map.of("ok", true); }
     @POST @Path("/payments")

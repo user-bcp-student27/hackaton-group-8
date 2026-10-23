@@ -13,10 +13,11 @@
     </section>
     <section class="welcome-form">
       <span class="eyebrow">BIENVENIDO A TILIN</span><h2>Ingresa a tu wallet</h2>
-      <p class="muted">Continúa con tu alias.</p>
+      <p class="muted">Ingresa tu alias y tu clave de 6 dígitos.</p>
       @if (error()) { <div class="alert error" role="alert">{{ error() }}</div> }
-      <form (ngSubmit)="loginAlias()"><label for="returning-alias">Alias de tu wallet</label><input id="returning-alias" name="returningAlias" [(ngModel)]="returningAlias" required pattern="[a-z][a-z0-9.]{2,29}" placeholder="Tu alias" autocomplete="username"><button class="primary full" type="submit" [disabled]="busy()">Ingresar</button></form>
-      <p class="fine-print">Acceso de prueba sin contraseña. No uses datos personales reales.</p>
+      <form (ngSubmit)="loginAlias()"><label for="returning-alias">Alias de tu wallet</label><input id="returning-alias" name="returningAlias" [(ngModel)]="returningAlias" required pattern="[a-z][a-z0-9.]{2,29}" placeholder="Tu alias" autocomplete="username"><label for="returning-pin">Clave de 6 dígitos</label><input id="returning-pin" name="returningPin" [(ngModel)]="returningPin" required pattern="[0-9]{6}" minlength="6" maxlength="6" inputmode="numeric" type="password" autocomplete="current-password" placeholder="••••••"><button class="primary full" type="submit" [disabled]="busy()">Ingresar</button></form>
+      <p class="fine-print">Tu clave no se muestra en pantalla. No uses datos personales reales en esta versión de prueba.</p>
+      <button class="text-button" type="button" (click)="loginLegacyAlias()" [disabled]="busy()">¿Tu cuenta ya existía? Configura tu clave</button>
       <div class="divider"><span>¿Aún no tienes cuenta?</span></div>
       <button class="secondary full" (click)="startOnboarding()" [disabled]="busy()">Crear mi wallet</button>
       <details class="evaluation-access"><summary>Cuentas de evaluación</summary>
@@ -78,10 +79,15 @@
               } @else {
                 <h2>Confirma tus datos</h2><div class="review-line"><span>Nombre</span><strong>{{ name }}</strong></div><div class="review-line"><span>Celular ficticio</span><strong>{{ phone }}</strong></div>
                 <div class="review-line"><span>Tu alias</span><strong>{{ alias }}</strong></div><div class="review-line"><span>Saldo de prueba si se aprueba</span><strong>S/ 500.00</strong></div>
+                <label for="new-pin">Crea tu clave de 6 dígitos</label><input id="new-pin" name="pin" [(ngModel)]="pin" required pattern="[0-9]{6}" minlength="6" maxlength="6" inputmode="numeric" type="password" autocomplete="new-password" placeholder="••••••">
+                <label for="confirm-pin">Confirma tu clave</label><input id="confirm-pin" name="confirmPin" [(ngModel)]="confirmPin" required pattern="[0-9]{6}" minlength="6" maxlength="6" inputmode="numeric" type="password" autocomplete="new-password" placeholder="••••••">
+                <small>Usa exactamente 6 números. La clave no se puede recuperar en esta versión de prueba.</small>
               }
               <div class="button-row">@if (step() > 1) { <button type="button" class="secondary" (click)="previousStep()" [disabled]="busy()">Atrás</button> }<button class="primary" type="submit" [disabled]="busy()">{{ step() < 3 ? 'Continuar →' : 'Finalizar registro' }}</button></div>
             </form>
           </section>
+        } @else if (user()?.pin_setup_required) {
+          <section class="card payment-form"><span class="eyebrow">ACTUALIZA TU ACCESO</span><h1>Protege tu wallet con una clave</h1><p class="muted">Esta cuenta es anterior al acceso con clave. Crea una ahora; en adelante la necesitarás para ingresar.</p><form (ngSubmit)="setupLegacyPin()"><label for="legacy-pin">Crea tu clave de 6 dígitos</label><input id="legacy-pin" name="pin" [(ngModel)]="pin" required pattern="[0-9]{6}" minlength="6" maxlength="6" inputmode="numeric" type="password" autocomplete="new-password" placeholder="••••••"><label for="legacy-confirm-pin">Confirma tu clave</label><input id="legacy-confirm-pin" name="confirmPin" [(ngModel)]="confirmPin" required pattern="[0-9]{6}" minlength="6" maxlength="6" inputmode="numeric" type="password" autocomplete="new-password" placeholder="••••••"><button class="primary full" type="submit" [disabled]="busy()">Guardar clave</button></form></section>
         } @else if (user()?.status !== 'ACTIVE') {
           <section class="card empty-state"><span class="empty-icon">◷</span><h1>{{ user()?.status === 'PENDING' ? 'Estamos revisando tu cuenta' : 'No pudimos activar tu wallet' }}</h1><p>{{ user()?.status === 'PENDING' ? 'Por ahora no puedes enviar pagos. El estado se actualizará cuando termine la revisión.' : 'Tu cuenta no está habilitada para pagar. Consulta la ayuda para conocer los siguientes pasos.' }}</p><button class="secondary" (click)="askAgent('Ayuda con onboarding')">Consultar ayuda</button><button class="text-button" (click)="refreshQuietly()">Consultar estado</button></section>
         } @else {
@@ -124,7 +130,9 @@
                   } @else {
                     <h2>{{ scanned() ? 'QR leído correctamente' : '¿A quién le enviamos?' }}</h2>
                     <form (ngSubmit)="reviewPayment()">
-                      <label for="destination">Destino</label><select id="destination" name="destination" [(ngModel)]="destination" [disabled]="channel === 'QR'" required><option value="">Selecciona un contacto</option>@for (c of contacts(); track c.id) { <option [value]="c.alias">{{ c.name }} · {{ c.alias }}</option> }</select>
+                      <label for="contact-search">Buscar contacto</label><input id="contact-search" name="contactSearch" [(ngModel)]="contactSearch" (ngModelChange)="searchContacts()" maxlength="40" placeholder="Nombre o alias" autocomplete="off" [disabled]="channel === 'QR'">
+                      @if (contactsSearching()) { <small role="status">Buscando contactos…</small> } @else if (contactSearch.trim() && !contactResults().length) { <small role="status">No encontramos contactos con ese nombre o alias.</small> }
+                      <label for="destination">Destino</label><select id="destination" name="destination" [(ngModel)]="destination" (ngModelChange)="selectDestination($event)" [disabled]="channel === 'QR'" required><option value="">Selecciona un contacto</option>@for (c of contactResults(); track c.id) { <option [value]="c.alias">{{ c.name }} · {{ c.alias }}</option> }</select>
                       <label for="amount">Monto en soles</label><div class="money-input"><span>S/</span><input id="amount" name="amount" [(ngModel)]="amount" inputmode="decimal" placeholder="0.00" required [readOnly]="channel === 'QR'"></div><small>Saldo disponible: {{ money(user()?.balance) }}</small>
                       @if (scanned()) { <p class="info-box">QR de {{ scanned()?.name }} · vence {{ date(scanned()!.expires_at) }}</p> }
                       <button class="primary full" type="submit" [disabled]="busy()">Revisar pago →</button>

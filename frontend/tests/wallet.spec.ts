@@ -33,12 +33,48 @@ test('W1: onboarding guiado persiste pasos y activa saldo', async ({page}) => {
   await page.getByRole('button', {name: /Continuar/}).click();
   await expect(page.getByLabel('Resultado del KYC simulado')).toHaveCount(0);
   await expect(page.getByRole('heading', {name: 'Confirma tus datos'})).toBeVisible();
+  await page.getByLabel('Crea tu clave de 6 dígitos').fill('123456');
+  await page.getByLabel('Confirma tu clave').fill('123456');
   await page.getByRole('button', {name: 'Finalizar registro'}).click();
   await expect(page.getByRole('heading', {name: /Hola, Persona/})).toBeVisible();
   await expect(page.locator('.balance-amount')).toContainText('500.00');
   await page.getByRole('button', {name: 'Cerrar sesión'}).click();
   await page.getByLabel('Alias de tu wallet', {exact: true}).fill(`test.${suffix}`);
+  await page.getByLabel('Clave de 6 dígitos', {exact: true}).fill('654321');
   await page.getByRole('button', {name: 'Ingresar', exact: true}).click();
+  await expect(page.getByRole('alert')).toContainText('Alias o clave incorrectos');
+  await page.getByLabel('Clave de 6 dígitos', {exact: true}).fill('123456');
+  await page.getByRole('button', {name: 'Ingresar', exact: true}).click();
+  await expect(page.getByRole('heading', {name: /Hola, Persona/})).toBeVisible();
+});
+
+test('una cuenta previa configura y confirma su clave antes de continuar', async ({page}) => {
+  const legacyUser = {
+    id: 'legacy-user', name: 'Persona Antigua', alias: 'antigua.demo', phone: null, role: 'PAYER', status: 'ACTIVE',
+    balance: 50000, reserved: 0, completed_at: '2026-10-01T00:00:00Z', campaign: 'organico',
+    created_at: '2026-10-01T00:00:00Z', pin_setup_required: true,
+  };
+  let meRequests = 0;
+  await page.route('**/api/me', route => {
+    meRequests++;
+    return meRequests === 1
+      ? route.fulfill({status: 401, json: {code: 'SESSION_REQUIRED', message: 'Ingresa a tu wallet.'}})
+      : route.fulfill({status: 200, json: legacyUser});
+  });
+  await page.route('**/api/demo/login', route => route.fulfill({status: 200, json: {demo: true}}));
+  await page.route('**/api/profile/pin', route => route.fulfill({status: 200, json: {...legacyUser, pin_setup_required: false}}));
+  await page.route('**/api/payments*', route => route.fulfill({status: 200, json: []}));
+  await page.route('**/api/contacts*', route => route.fulfill({status: 200, json: []}));
+  await page.goto('/');
+  await page.getByLabel('Alias de tu wallet', {exact: true}).fill('antigua.demo');
+  await page.getByRole('button', {name: /cuenta ya existía/}).click();
+  await expect(page.getByRole('heading', {name: 'Protege tu wallet con una clave'})).toBeVisible();
+  await page.getByLabel('Crea tu clave de 6 dígitos').fill('123456');
+  await page.getByLabel('Confirma tu clave').fill('654321');
+  await page.getByRole('button', {name: 'Guardar clave'}).click();
+  await expect(page.getByRole('alert')).toContainText('no coinciden');
+  await page.getByLabel('Confirma tu clave').fill('123456');
+  await page.getByRole('button', {name: 'Guardar clave'}).click();
   await expect(page.getByRole('heading', {name: /Hola, Persona/})).toBeVisible();
 });
 
@@ -48,6 +84,8 @@ test('W2/W4: pago, comprobante y reintento conservan referencia y saldo', async 
   await login(page);
   const balanceBefore = await page.locator('.balance-amount').textContent();
   await page.getByRole('button', {name: 'Enviar A un contacto'}).click();
+  await page.getByLabel('Buscar contacto').fill('luis');
+  await expect(page.locator('#destination')).toContainText('Luis Ramos · luis.demo');
   await page.getByLabel('Destino', {exact: true}).selectOption('luis.demo');
   await page.getByLabel('Monto en soles').fill('12.34');
   await expect(page.getByLabel('Escenario del proveedor mock')).toHaveCount(0);

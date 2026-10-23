@@ -23,6 +23,9 @@ export class App implements OnInit, OnDestroy {
   notice = signal('');
   view = signal<View>('home');
   contacts = signal<Contact[]>([]);
+  contactResults = signal<Contact[]>([]);
+  contactsSearching = signal(false);
+  selectedDestination = signal<Contact | null>(null);
   payments = signal<Payment[]>([]);
   selected = signal<Payment | null>(null);
   qr = signal<Qr | null>(null);
@@ -51,7 +54,7 @@ export class App implements OnInit, OnDestroy {
   month = this.today().slice(0, 7);
   campaign = 'organico';
   spend = '';
-  name = ''; alias = ''; phone = ''; consent = false;
+  name = ''; alias = ''; phone = ''; consent = false; pin = ''; confirmPin = '';
   caseCategory = 'TECHNICAL';
   caseNote = '';
   decisionNote = '';
@@ -60,8 +63,12 @@ export class App implements OnInit, OnDestroy {
   fixtureAmount = '';
   question = '';
   returningAlias = '';
+  returningPin = '';
+  contactSearch = '';
   agentPaymentId = signal<string | null>(null);
   private poll?: ReturnType<typeof setInterval>;
+  private contactSearchTimer?: ReturnType<typeof setTimeout>;
+  private contactSearchSequence = 0;
   private reviewKey: string | null = null;
 
   private attemptStorageKeys(): string[] {
@@ -92,7 +99,10 @@ export class App implements OnInit, OnDestroy {
       if (this.user() && !this.busy() && !document.hidden) void this.refreshQuietly();
     }, 5000);
   }
-  ngOnDestroy(): void { if (this.poll) clearInterval(this.poll); }
+  ngOnDestroy(): void {
+    if (this.poll) clearInterval(this.poll);
+    if (this.contactSearchTimer) clearTimeout(this.contactSearchTimer);
+  }
   today(): string { return new Intl.DateTimeFormat('en-CA', {timeZone: 'America/Lima', year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date()); }
   money(value: number | null | undefined): string { return value == null ? 'Sin datos' : new Intl.NumberFormat('es-PE', {style: 'currency', currency: 'PEN'}).format(value / 100); }
   date(value: string): string { return new Intl.DateTimeFormat('es-PE', {timeZone: 'America/Lima', dateStyle: 'medium', timeStyle: 'short'}).format(new Date(value)); }
@@ -113,7 +123,7 @@ export class App implements OnInit, OnDestroy {
     this.error.set(error instanceof Error ? error.message : 'Ocurrió un error inesperado.');
     if (error instanceof ApiFailure && error.status === 401) {
       this.user.set(null); this.selected.set(null); this.attempt.set(null); this.registering.set(false);
-      this.payments.set([]); this.contacts.set([]); this.qr.set(null); this.scanned.set(null); this.agent.set(null);
+      this.payments.set([]); this.contacts.set([]); this.contactResults.set([]); this.qr.set(null); this.scanned.set(null); this.agent.set(null);
       this.cases.set([]); this.audit.set([]); this.metrics.set(null); this.reconciliation.set(null); this.kycQueue.set([]);
     }
   }
@@ -124,7 +134,7 @@ export class App implements OnInit, OnDestroy {
   }
   async loadData(): Promise<void> {
     const user = this.user();
-    if (!user) return;
+    if (!user || user.pin_setup_required) return;
     if (user.status === 'ACTIVE') {
       const [history, contacts] = await Promise.all([
         api<Payment[]>(`/payments?date=${encodeURIComponent(this.filterDate)}&reference=${encodeURIComponent(this.filterReference)}&channel=${this.filterChannel}`),
@@ -132,6 +142,7 @@ export class App implements OnInit, OnDestroy {
       ]);
       if (this.user()?.id !== user.id) return;
       this.payments.set(history); this.contacts.set(contacts);
+      if (!this.contactSearch.trim()) this.contactResults.set(contacts);
     }
     if (user.role === 'OPS') {
       const [cases, queue, audit] = await Promise.all([
@@ -155,9 +166,9 @@ export class App implements OnInit, OnDestroy {
       }
     } catch (error) { if (this.user()?.id === uid) this.handle(error); }
   }
-  async login(profile: string): Promise<void> {
+  async login(profile: string, pin?: string): Promise<void> {
     await this.run(async () => {
-      await api('/demo/login', { userId: profile });
+      await api('/demo/login', { userId: profile, ...(pin ? {pin} : {}) });
       this.user.set(await api<User>('/me'));
       this.view.set(this.user()?.role === 'MERCHANT' ? 'merchant' : this.user()?.role === 'OPS' ? 'operations' : 'home');
       this.selected.set(null); this.attempt.set(null); this.agent.set(null); this.registering.set(false); this.reviewing.set(false); this.qr.set(null); this.scanned.set(null);
@@ -169,18 +180,37 @@ export class App implements OnInit, OnDestroy {
   async logout(): Promise<void> {
     await this.run(async () => {
       await api('/logout', {});
-      this.user.set(null); this.payments.set([]); this.contacts.set([]); this.selected.set(null); this.attempt.set(null);
+      this.user.set(null); this.payments.set([]); this.contacts.set([]); this.contactResults.set([]); this.selected.set(null); this.selectedDestination.set(null); this.attempt.set(null);
       this.qr.set(null); this.scanned.set(null); this.agent.set(null); this.registering.set(false); this.reviewing.set(false);
       this.agentPaymentId.set(null);
       this.cases.set([]); this.audit.set([]); this.metrics.set(null); this.reconciliation.set(null); this.kycQueue.set([]);
       this.filterDate = ''; this.filterReference = ''; this.filterChannel = '';
     });
   }
-  async loginAlias(): Promise<void> { await this.login(this.returningAlias.trim()); }
+  async loginAlias(): Promise<void> {
+    const pin = this.returningPin;
+    await this.login(this.returningAlias.trim(), pin);
+    this.returningPin = '';
+  }
+  async loginLegacyAlias(): Promise<void> {
+    await this.login(this.returningAlias.trim());
+    this.returningPin = '';
+  }
+  async setupLegacyPin(): Promise<void> {
+    if (!/^[0-9]{6}$/.test(this.pin)) { this.error.set('Crea una clave de exactamente 6 dígitos.'); return; }
+    if (this.pin !== this.confirmPin) { this.error.set('Las claves no coinciden.'); return; }
+    await this.run(async () => {
+      this.user.set(await api<User>('/profile/pin', {pin: this.pin}));
+      this.pin = ''; this.confirmPin = '';
+      await this.loadData();
+      this.notice.set('Tu clave quedó configurada. En adelante ingresa con tu alias y clave.');
+    });
+  }
   async startOnboarding(): Promise<void> {
     await this.run(async () => {
       await api('/onboarding/start', {campaign: 'organico'});
       this.user.set(await api<User>('/me')); this.registering.set(true); this.step.set(1);
+      this.pin = ''; this.confirmPin = '';
     });
   }
   previousStep(): void { this.step.update(previous => previous - 1); }
@@ -198,8 +228,11 @@ export class App implements OnInit, OnDestroy {
     });
   }
   async finishOnboarding(): Promise<void> {
+    if (!/^[0-9]{6}$/.test(this.pin)) { this.error.set('Crea una clave de exactamente 6 dígitos.'); return; }
+    if (this.pin !== this.confirmPin) { this.error.set('Las claves no coinciden.'); return; }
     await this.run(async () => {
-      this.user.set(await api<User>('/onboarding/complete', {name: this.name, alias: this.alias, phone: this.phone, consent: this.consent}));
+      this.user.set(await api<User>('/onboarding/complete', {name: this.name, alias: this.alias, phone: this.phone, consent: this.consent, pin: this.pin}));
+      this.pin = ''; this.confirmPin = '';
       this.registering.set(false); this.view.set('home'); await this.loadData();
       this.notice.set(this.user()?.status === 'ACTIVE' ? 'Tu wallet está lista. Tienes S/ 500 de saldo de prueba para empezar.' : 'Estamos revisando tu cuenta. Puedes consultar el estado aquí.');
     });
@@ -208,13 +241,41 @@ export class App implements OnInit, OnDestroy {
   preparePay(contact?: Contact): void {
     if (this.attempt()) { this.error.set('Primero consulta o cierra el intento anterior desde el formulario de pago.'); this.view.set('pay'); return; }
     this.destination = contact?.alias ?? ''; this.amount = ''; this.channel = 'ALIAS';
+    this.selectedDestination.set(contact ?? null);
+    this.contactSearch = ''; this.contactResults.set(this.contacts());
     this.reviewKey = null;
     this.scanned.set(null); this.reviewing.set(false); this.navigate('pay');
+  }
+  searchContacts(): void {
+    const query = this.contactSearch.trim();
+    const sequence = ++this.contactSearchSequence;
+    if (this.contactSearchTimer) clearTimeout(this.contactSearchTimer);
+    if (!query) {
+      this.contactsSearching.set(false);
+      this.contactResults.set(this.contacts());
+      return;
+    }
+    this.contactSearchTimer = setTimeout(async () => {
+      this.contactsSearching.set(true);
+      try {
+        const matches = await api<Contact[]>(`/contacts?q=${encodeURIComponent(query)}`);
+        if (sequence === this.contactSearchSequence) this.contactResults.set(matches);
+      } catch (error) {
+        if (sequence === this.contactSearchSequence) this.handle(error);
+      } finally {
+        if (sequence === this.contactSearchSequence) this.contactsSearching.set(false);
+      }
+    }, 250);
+  }
+  selectDestination(alias: string): void {
+    this.destination = alias;
+    const contact = this.contactResults().find(item => item.alias === alias) ?? this.contacts().find(item => item.alias === alias);
+    this.selectedDestination.set(contact ?? null);
   }
   async reviewPayment(): Promise<void> {
     this.error.set('');
     try {
-      if (!this.contacts().some(c => c.alias === this.destination)) throw new Error('Selecciona un destino antes de continuar.');
+      if (!this.contacts().some(c => c.alias === this.destination) && !this.contactResults().some(c => c.alias === this.destination)) throw new Error('Selecciona un destino antes de continuar.');
       cents(this.amount, this.channel === 'QR' ? 15000 : 20000);
       if (cents(this.amount, this.channel === 'QR' ? 15000 : 20000) > (this.user()?.balance ?? 0)) throw new Error('Tu saldo disponible no alcanza. Ingresa un monto menor.');
       if (this.channel === 'QR' && !this.scanned()) throw new Error('Selecciona primero la imagen del QR del comercio.');
@@ -225,7 +286,10 @@ export class App implements OnInit, OnDestroy {
       });
     } catch (error) { this.handle(error); }
   }
-  destinationContact(): Contact | undefined { return this.contacts().find(c => c.alias === this.destination); }
+  destinationContact(): Contact | undefined {
+    return this.selectedDestination()?.alias === this.destination ? this.selectedDestination() ?? undefined
+      : this.contactResults().find(contact => contact.alias === this.destination) ?? this.contacts().find(contact => contact.alias === this.destination);
+  }
   async confirmPayment(): Promise<void> {
     await this.run(async () => {
       let attempt = this.attempt();
@@ -312,7 +376,10 @@ export class App implements OnInit, OnDestroy {
       });
       const qr = await api<Qr>('/qr/decode', {image});
       this.reviewKey = null;
-      this.scanned.set(qr); this.destination = qr.alias; this.amount = (qr.amount / 100).toFixed(2); this.channel = 'QR'; this.view.set('pay'); this.reviewing.set(false);
+      this.scanned.set(qr); this.destination = qr.alias;
+      this.selectedDestination.set({id: qr.merchant_id, name: qr.name, alias: qr.alias, role: 'MERCHANT'});
+      this.contactSearch = ''; this.contactResults.set(this.contacts());
+      this.amount = (qr.amount / 100).toFixed(2); this.channel = 'QR'; this.view.set('pay'); this.reviewing.set(false);
       this.notice.set('QR leído. Verifica el comercio y el monto antes de confirmar.');
     });
     input.value = '';

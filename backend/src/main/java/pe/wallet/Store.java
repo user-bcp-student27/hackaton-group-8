@@ -61,7 +61,8 @@ public class Store {
     private void seed(Connection c, String id, String name, String alias, String phone, String role) throws SQLException {
         if (one(c, "SELECT id FROM users WHERE id=?", id) != null) return;
         String now = Instant.now().toString();
-        exec(c, "INSERT INTO users VALUES(?,?,?,?,?,?,?,?,?)", id, name, alias, phone, role, "ACTIVE", now, now, "demo");
+        exec(c, "INSERT INTO users (id,name,alias,phone,role,status,created_at,completed_at,campaign) VALUES(?,?,?,?,?,?,?,?,?)",
+            id, name, alias, phone, role, "ACTIVE", now, now, "demo");
         if (!role.equals("OPS")) {
             exec(c, "INSERT INTO ledger VALUES(?,?,?,?,?,?)", UUID.randomUUID().toString(), null, id, 50000L, "FUNDING", now);
             exec(c, "INSERT INTO ledger VALUES(?,?,?,?,?,?)", UUID.randomUUID().toString(), null, "TREASURY", -50000L, "FUNDING", now);

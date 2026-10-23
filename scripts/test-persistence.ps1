@@ -43,6 +43,17 @@ try {
     $server = Start-TestServer
     $headers = @{ 'X-Wallet-Request' = '1' }
     Invoke-RestMethod "$base/demo/login" -Method Post -Headers $headers -ContentType 'application/json' -Body '{"userId":"demo-ana"}' -SessionVariable session | Out-Null
+    $pinSuffix = (Get-Random -Minimum 10000000 -Maximum 99999999).ToString()
+    $pinAlias = "persist$pinSuffix"
+    $pinPhone = "9$pinSuffix"
+    $startBody = @{ campaign = 'persistencia' } | ConvertTo-Json
+    Invoke-RestMethod "$base/onboarding/start" -Method Post -Headers $headers -ContentType 'application/json' -Body $startBody -SessionVariable pinSession | Out-Null
+    $identityBody = @{ step = 'identity'; name = 'Persona Persistente'; alias = $pinAlias; phone = $pinPhone; consent = $false } | ConvertTo-Json
+    Invoke-RestMethod "$base/onboarding/step" -Method Post -Headers $headers -ContentType 'application/json' -Body $identityBody -WebSession $pinSession | Out-Null
+    $consentBody = @{ step = 'consent'; consent = $true } | ConvertTo-Json
+    Invoke-RestMethod "$base/onboarding/step" -Method Post -Headers $headers -ContentType 'application/json' -Body $consentBody -WebSession $pinSession | Out-Null
+    $completeBody = @{ name = 'Persona Persistente'; alias = $pinAlias; phone = $pinPhone; consent = $true; pin = '123456' } | ConvertTo-Json
+    Invoke-RestMethod "$base/onboarding/complete" -Method Post -Headers $headers -ContentType 'application/json' -Body $completeBody -WebSession $pinSession | Out-Null
     $headers['Idempotency-Key'] = [Guid]::NewGuid().ToString()
     $body = '{"destination":"luis.demo","amount":1234,"channel":"ALIAS"}'
     $first = Invoke-RestMethod "$base/payments" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -WebSession $session
@@ -51,12 +62,18 @@ try {
     $server.WaitForExit()
     $server = Start-TestServer
     $after = Invoke-RestMethod "$base/me" -WebSession $session
+    $loginBody = @{ userId = $pinAlias; pin = '123456' } | ConvertTo-Json
+    Invoke-RestMethod "$base/demo/login" -Method Post -Headers $headers -ContentType 'application/json' -Body $loginBody -SessionVariable restoredPinSession | Out-Null
+    $restoredPinUser = Invoke-RestMethod "$base/me" -WebSession $restoredPinSession
     $duplicate = Invoke-RestMethod "$base/payments" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -WebSession $session
     $final = Invoke-RestMethod "$base/me" -WebSession $session
     if ($first.id -ne $duplicate.id -or -not $duplicate.duplicate -or $before.balance -ne 48766 -or $after.balance -ne 48766 -or $final.balance -ne 48766) {
         throw 'La persistencia o idempotencia tras reinicio no cumple la invariante.'
     }
-    Write-Host "PASS: reinicio conserva sesion, referencia $($first.id), ledger, saldo e idempotencia."
+    if ($restoredPinUser.alias -ne $pinAlias -or $restoredPinUser.balance -ne 50000 -or $null -ne $restoredPinUser.pin_hash -or $null -ne $restoredPinUser.pin_salt) {
+        throw 'El PIN no se autentica tras reinicio o la respuesta expone datos sensibles.'
+    }
+    Write-Host "PASS: reinicio conserva sesion, referencia $($first.id), ledger, saldo, idempotencia y PIN no expuesto."
 } finally {
     if ($null -ne $server -and -not $server.HasExited) {
         Stop-Process -Id $server.Id

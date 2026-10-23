@@ -18,9 +18,14 @@ public class Wallet {
     static final ZoneId LIMA = ZoneId.of("America/Lima");
     static final Set<String> OUTCOMES = Set.of("APPROVED", "DECLINED", "PENDING", "TIMEOUT");
     static final Set<String> TERMINALS = Set.of("SUCCEEDED", "FAILED", "EXPIRED");
+    static final Set<String> DEMO_PROFILES = Set.of("demo-ana", "demo-luis", "demo-merchant", "demo-ops");
+        static final Map<String, String> DEMO_ALIASES = Map.of("ana.demo", "demo-ana", "luis.demo", "demo-luis",
+            "cafe.demo", "demo-merchant", "ops.demo", "demo-ops");
+    static final int MAX_PIN_FAILURES = 5;
+    static final Duration PIN_LOCK_DURATION = Duration.ofMinutes(15);
 
     public record OnboardingStart(String campaign) {}
-    public record OnboardingComplete(String name, String alias, String phone, boolean consent, String kyc) {}
+    public record OnboardingComplete(String name, String alias, String phone, boolean consent, String pin, String kyc) {}
     public record OnboardingStep(String step, String name, String alias, String phone, boolean consent) {}
     public record ReconcileInput(String date, String channel) {}
     public record CheckoutInput(String attemptId) {}
@@ -31,6 +36,7 @@ public class Wallet {
     public record FixtureInput(String outcome, Long amount, boolean missing) {}
     public record AcquisitionInput(String month, String campaign, Long cents) {}
     public record AgentInput(String message, String paymentId) {}
+    private record PinLoginResult(String token, boolean locked) {}
 
     static String id() { return UUID.randomUUID().toString(); }
     static String now() { return Instant.now().toString(); }
@@ -55,10 +61,17 @@ public class Wallet {
     }
 
     Map<String, Object> actor(Connection c, String token) throws SQLException {
+        return actor(c, token, false);
+    }
+    Map<String, Object> actor(Connection c, String token, boolean allowPinSetup) throws SQLException {
         if (token == null || token.length() > 200) throw new ApiError(401, "SESSION_REQUIRED", "Ingresa a tu wallet para continuar.");
         Map<String, Object> user = one(c, "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
                 hash(token), now());
         if (user == null) throw new ApiError(401, "SESSION_EXPIRED", "Tu sesión expiró. Ingresa nuevamente.");
+        if (!allowPinSetup && user.get("completed_at") != null && user.get("pin_hash") == null
+                && !DEMO_PROFILES.contains(text(user.get("id")))) {
+            throw new ApiError(403, "PIN_SETUP_REQUIRED", "Configura una clave de seis dígitos antes de continuar.");
+        }
         return user;
     }
     void role(Map<String, Object> user, String expected) {
@@ -94,6 +107,12 @@ public class Wallet {
     }
     Map<String, Object> viewUser(Connection c, Map<String, Object> user) throws SQLException {
         Map<String, Object> result = new LinkedHashMap<>(user);
+        result.remove("pin_salt");
+        result.remove("pin_hash");
+        result.remove("pin_failures");
+        result.remove("pin_locked_until");
+        result.put("pin_setup_required", user.get("completed_at") != null
+            && user.get("pin_hash") == null && !DEMO_PROFILES.contains(text(user.get("id"))));
         result.put("balance", balance(c, text(user.get("id"))));
         result.put("reserved", number(one(c, "SELECT COALESCE(SUM(amount),0) AS total FROM payments WHERE payer_id=? AND status='PENDING'", user.get("id")).get("total")));
         result.put("demo", true);
@@ -105,7 +124,7 @@ public class Wallet {
         return result;
     }
     public Map<String, Object> me(String token) {
-        return store.tx(c -> viewUser(c, actor(c, token)));
+        return store.tx(c -> viewUser(c, actor(c, token, true)));
     }
     String session(Connection c, String user) throws SQLException {
         byte[] bytes = new byte[32];
@@ -116,22 +135,68 @@ public class Wallet {
         return token;
     }
     public String login(String userId) {
-        require(userId != null && userId.matches("[a-z][a-z0-9.-]{2,49}"), "DEMO_PROFILE", "Elige un perfil o alias de demostración válido.");
+        if (!DEMO_PROFILES.contains(userId)) throw new ApiError(401, "LOGIN_FAILED", "Alias o clave incorrectos.");
+        return store.tx(c -> session(c, userId));
+    }
+    public String login(String alias, String pin) {
+        if (alias != null && DEMO_PROFILES.contains(alias)) return login(alias);
+        if (pin == null && alias != null && DEMO_ALIASES.containsKey(alias)) return login(DEMO_ALIASES.get(alias));
+        field(alias, "[a-z][a-z0-9.]{2,29}", "Alias o clave incorrectos.");
+        if (pin == null) {
+            String token = store.tx(c -> {
+                Map<String, Object> user = one(c, "SELECT id,pin_hash FROM users WHERE alias=? AND completed_at IS NOT NULL", alias);
+                return user != null && user.get("pin_hash") == null ? session(c, text(user.get("id"))) : null;
+            });
+            if (token == null) throw new ApiError(401, "LOGIN_FAILED", "Alias o clave incorrectos.");
+            return token;
+        }
+        field(pin, "[0-9]{6}", "Ingresa una clave de 6 dígitos.");
+        PinLoginResult result = store.tx(c -> {
+            Map<String, Object> user = one(c, "SELECT id,pin_salt,pin_hash,pin_failures,pin_locked_until FROM users WHERE alias=? AND completed_at IS NOT NULL", alias);
+            if (user == null || user.get("pin_hash") == null || user.get("pin_salt") == null) {
+                PinSecurity.dummyCheck(pin);
+                return new PinLoginResult(null, false);
+            }
+            String lockedUntil = text(user.get("pin_locked_until"));
+            if (!lockedUntil.isBlank() && Instant.parse(lockedUntil).isAfter(Instant.now())) return new PinLoginResult(null, true);
+            if (!PinSecurity.matches(pin, text(user.get("pin_salt")), text(user.get("pin_hash")))) {
+                int failures = (int) number(user.get("pin_failures")) + 1;
+                boolean locked = failures >= MAX_PIN_FAILURES;
+                String newLockedUntil = locked ? Instant.now().plus(PIN_LOCK_DURATION).toString() : null;
+                exec(c, "UPDATE users SET pin_failures=?,pin_locked_until=? WHERE id=?", failures, newLockedUntil, user.get("id"));
+                return new PinLoginResult(null, locked);
+            }
+            exec(c, "UPDATE users SET pin_failures=0,pin_locked_until=NULL WHERE id=?", user.get("id"));
+            return new PinLoginResult(session(c, text(user.get("id"))), false);
+        });
+        if (result.token() == null) {
+            if (result.locked()) throw new ApiError(429, "LOGIN_LOCKED", "Demasiados intentos. Intenta nuevamente en 15 minutos.");
+            throw new ApiError(401, "LOGIN_FAILED", "Alias o clave incorrectos.");
+        }
+        return result.token();
+    }
+    public Map<String, Object> setupLegacyPin(String token, String pin) {
+        String validPin = field(pin, "[0-9]{6}", "La clave debe tener exactamente 6 dígitos.");
+        PinSecurity.Credential credential = PinSecurity.create(validPin);
         return store.tx(c -> {
-            if (Set.of("demo-ana", "demo-luis", "demo-merchant", "demo-ops").contains(userId)) return session(c, userId);
-            Map<String, Object> user = one(c, "SELECT id FROM users WHERE alias=? AND completed_at IS NOT NULL", userId);
-            if (user == null) throw new ApiError(404, "DEMO_PROFILE", "No encontramos ese alias de prueba. Completa primero el registro.");
-            return session(c, text(user.get("id")));
+            Map<String, Object> user = actor(c, token, true);
+            require(user.get("completed_at") != null && user.get("pin_hash") == null
+                            && !DEMO_PROFILES.contains(text(user.get("id"))),
+                    "PIN_ALREADY_CONFIGURED", "Esta cuenta ya tiene una clave configurada.");
+            exec(c, "UPDATE users SET pin_salt=?,pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?",
+                    credential.salt(), credential.hash(), user.get("id"));
+            return viewUser(c, one(c, "SELECT * FROM users WHERE id=?", user.get("id")));
         });
     }
     public void logout(String token) {
-        store.tx(c -> { actor(c, token); exec(c, "DELETE FROM sessions WHERE token_hash=?", hash(token)); return null; });
+        store.tx(c -> { actor(c, token, true); exec(c, "DELETE FROM sessions WHERE token_hash=?", hash(token)); return null; });
     }
     public String start(OnboardingStart input) {
         String campaign = field(input.campaign(), "[a-zA-Z0-9_-]{1,40}", "La campaña requiere entre 1 y 40 letras, números o guiones.");
         return store.tx(c -> {
             String user = id();
-            exec(c, "INSERT INTO users VALUES(?,?,?,?,?,?,?,?,?)", user, "Registro en progreso", "draft-" + user.substring(0, 12),
+                exec(c, "INSERT INTO users (id,name,alias,phone,role,status,created_at,completed_at,campaign) VALUES(?,?,?,?,?,?,?,?,?)",
+                    user, "Registro en progreso", "draft-" + user.substring(0, 12),
                     null, "PAYER", "PENDING", now(), null, campaign);
             event(c, user, "onboarding_started", user);
             return session(c, user);
@@ -141,8 +206,10 @@ public class Wallet {
         String name = clean(input.name(), 3, 80, "Escribe un nombre ficticio entre 3 y 80 caracteres.");
         String alias = field(input.alias(), "[a-z][a-z0-9.]{2,29}", "El alias debe comenzar con una letra y tener de 3 a 30 letras minúsculas, números o puntos.");
         String phone = field(input.phone(), "9[0-9]{8}", "Ingresa un celular ficticio peruano de 9 dígitos.");
+        String pin = field(input.pin(), "[0-9]{6}", "La clave debe tener exactamente 6 dígitos.");
         require(input.consent(), "CONSENT_REQUIRED", "Acepta el uso de datos sintéticos para continuar.");
         require(Set.of("APPROVED", "PENDING", "DECLINED").contains(text(input.kyc())), "KYC_SCENARIO", "Selecciona un resultado KYC de prueba.");
+        PinSecurity.Credential credential = PinSecurity.create(pin);
         return store.tx(c -> {
             Map<String, Object> user = actor(c, token);
             require(user.get("completed_at") == null, "ALREADY_COMPLETED", "Este onboarding ya fue completado.");
@@ -151,7 +218,8 @@ public class Wallet {
             Map<String, Object> duplicate = one(c, "SELECT id FROM users WHERE (alias=? OR phone=?) AND id<>?", alias, phone, user.get("id"));
             if (duplicate != null) throw new ApiError(409, "IDENTITY_EXISTS", "El alias o celular de prueba ya está registrado.");
             String status = switch (input.kyc()) { case "APPROVED" -> "ACTIVE"; case "DECLINED" -> "REJECTED"; default -> "PENDING"; };
-            exec(c, "UPDATE users SET name=?,alias=?,phone=?,status=?,completed_at=? WHERE id=?", name, alias, phone, status, now(), user.get("id"));
+                exec(c, "UPDATE users SET name=?,alias=?,phone=?,status=?,completed_at=?,pin_salt=?,pin_hash=?,pin_failures=0,pin_locked_until=NULL WHERE id=?",
+                    name, alias, phone, status, now(), credential.salt(), credential.hash(), user.get("id"));
             for (String step : List.of("kyc_step_completed", "onboarding_completed")) {
                 event(c, text(user.get("id")), step, text(user.get("id")));
             }
@@ -187,11 +255,18 @@ public class Wallet {
         posting(c, null, "TREASURY", user, 50000L, "FUNDING");
         event(c, user, "wallet_activated", user);
     }
-    public List<Map<String, Object>> contacts(String token) {
+    public List<Map<String, Object>> contacts(String token, String search) {
+        String query = search == null ? "" : search.trim().toLowerCase(Locale.ROOT);
+        require(query.length() <= 40, "VALIDATION", "La búsqueda admite hasta 40 caracteres.");
         return store.tx(c -> {
             Map<String, Object> user = actor(c, token);
             active(user);
-            return rows(c, "SELECT id,name,alias,role FROM users WHERE status='ACTIVE' AND role<>'OPS' AND id<>? ORDER BY name LIMIT 100", user.get("id"));
+            if (query.isEmpty()) return rows(c, "SELECT id,name,alias,role FROM users WHERE status='ACTIVE' AND role<>'OPS' AND id<>? ORDER BY name LIMIT 100", user.get("id"));
+            String escaped = query.replace("!", "!!").replace("%", "!%").replace("_", "!_");
+            String pattern = "%" + escaped + "%";
+            return rows(c, "SELECT id,name,alias,role FROM users WHERE status='ACTIVE' AND role<>'OPS' AND id<>? " +
+                    "AND (LOWER(name) LIKE ? ESCAPE '!' OR LOWER(alias) LIKE ? ESCAPE '!') ORDER BY name LIMIT 30",
+                    user.get("id"), pattern, pattern);
         });
     }
     Map<String, Object> payment(Connection c, String paymentId) throws SQLException {

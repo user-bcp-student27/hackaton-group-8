@@ -54,7 +54,7 @@ class WalletTest {
     String register(String scenario, String alias, String phone) {
         String token = wallet.start(new Wallet.OnboardingStart("organico"));
         identity(token, alias, phone);
-        wallet.complete(token, new Wallet.OnboardingComplete("Persona Sintética", alias, phone, true, scenario));
+        wallet.complete(token, new Wallet.OnboardingComplete("Persona Sintética", alias, phone, true, "123456", scenario));
         return token;
     }
 
@@ -67,7 +67,7 @@ class WalletTest {
         assertEquals(2, wallet.me(token).get("onboarding_step"));
         wallet.onboardingStep(token, new Wallet.OnboardingStep("consent", null, null, null, true));
         assertEquals(3, wallet.me(token).get("onboarding_step"));
-        var complete = new Wallet.OnboardingComplete("Persona Demo", "persona.demo", "900000011", true, "APPROVED");
+        var complete = new Wallet.OnboardingComplete("Persona Demo", "persona.demo", "900000011", true, "123456", "APPROVED");
         assertEquals("ACTIVE", wallet.complete(token, complete).get("status"));
         assertEquals(50000, balance(token));
         assertThrows(ApiError.class, () -> wallet.complete(token, complete));
@@ -81,9 +81,9 @@ class WalletTest {
         String token = wallet.start(new Wallet.OnboardingStart("organico"));
         assertThrows(ApiError.class, () -> wallet.onboardingStep(token, new Wallet.OnboardingStep("identity", "X", "bad", "123", false)));
         assertThrows(ApiError.class, () -> wallet.onboardingStep(token, new Wallet.OnboardingStep("consent", null, null, null, true)));
-        post("/onboarding/complete", token, Map.of("name", "Persona Demo", "alias", "persona.demo", "phone", "900000011", "consent", true, "kyc", "APPROVED")).then().statusCode(400).body("code", equalTo("STEPS_REQUIRED"));
+        post("/onboarding/complete", token, Map.of("name", "Persona Demo", "alias", "persona.demo", "phone", "900000011", "consent", true, "pin", "123456", "kyc", "APPROVED")).then().statusCode(400).body("code", equalTo("STEPS_REQUIRED"));
         identity(token, "persona.demo", "900000011");
-        post("/onboarding/complete", token, Map.of("name", "Persona Demo", "alias", "persona.demo", "phone", "900000011", "consent", false, "kyc", "APPROVED")).then().statusCode(400).body("code", equalTo("CONSENT_REQUIRED"));
+        post("/onboarding/complete", token, Map.of("name", "Persona Demo", "alias", "persona.demo", "phone", "900000011", "consent", false, "pin", "123456", "kyc", "APPROVED")).then().statusCode(400).body("code", equalTo("CONSENT_REQUIRED"));
     }
     @Test void pendingKycNeedsHumanAndRejectedCannotPay() {
         String pending = register("PENDING", "pending.demo", "900000012");
@@ -104,12 +104,49 @@ class WalletTest {
     }
     @Test void registeredWalletCanReturnThroughMockAliasLogin() {
         register("APPROVED", "return.demo", "900000015");
-        String token = wallet.login("return.demo");
+        String token = wallet.login("return.demo", "123456");
         assertEquals("return.demo", wallet.me(token).get("alias"));
         assertEquals(50000, balance(token));
-        assertThrows(ApiError.class, () -> wallet.login("unknown.demo"));
+        assertFalse(wallet.me(token).containsKey("pin_hash"));
+        assertFalse(wallet.me(token).containsKey("pin_salt"));
+        assertThrows(ApiError.class, () -> wallet.login("return.demo", "654321"));
+        assertThrows(ApiError.class, () -> wallet.login("unknown.demo", "123456"));
+        post("/demo/login", null, Map.of("userId", "return.demo", "pin", "654321"))
+            .then().statusCode(401).body("code", equalTo("LOGIN_FAILED"));
+        post("/demo/login", null, Map.of("userId", "return.demo", "pin", "123456"))
+            .then().statusCode(200);
         store.tx(c -> { exec(c, "UPDATE sessions SET expires_at=? WHERE token_hash=?", Instant.now().minusSeconds(5).toString(), Wallet.hash(token)); return null; });
         given().cookie("wallet_session", token).get("/api/me").then().statusCode(401).body("code", equalTo("SESSION_EXPIRED"));
+    }
+    @Test void pinLoginLocksAfterFiveFailures() {
+        register("APPROVED", "locked.demo", "900000016");
+        for (int attempt = 0; attempt < Wallet.MAX_PIN_FAILURES; attempt++) {
+            assertThrows(ApiError.class, () -> wallet.login("locked.demo", "000000"));
+        }
+        ApiError locked = assertThrows(ApiError.class, () -> wallet.login("locked.demo", "123456"));
+        assertEquals(429, locked.getResponse().getStatus());
+    }
+    @Test void legacyAccountMustSetPinBeforeUsingWallet() {
+        register("APPROVED", "legacy.demo", "900000017");
+        store.tx(c -> { exec(c, "UPDATE users SET pin_salt=NULL,pin_hash=NULL WHERE alias=?", "legacy.demo"); return null; });
+        String legacySession = wallet.login("legacy.demo", null);
+        assertEquals(true, wallet.me(legacySession).get("pin_setup_required"));
+        assertEquals(403, assertThrows(ApiError.class, () -> wallet.contacts(legacySession, "luis")).getResponse().getStatus());
+        post("/profile/pin", legacySession, Map.of("pin", "654321"))
+                .then().statusCode(200).body("pin_setup_required", equalTo(false)).body("pin_hash", nullValue()).body("pin_salt", nullValue());
+        assertThrows(ApiError.class, () -> wallet.login("legacy.demo", "123456"));
+        assertEquals("legacy.demo", wallet.me(wallet.login("legacy.demo", "654321")).get("alias"));
+        assertThrows(ApiError.class, () -> wallet.setupLegacyPin(legacySession, "111111"));
+    }
+    @Test void contactsCanBeSearchedWithoutReturningSelfOrOperations() {
+        var matches = wallet.contacts(ana, "LUIS");
+        assertEquals(1, matches.size());
+        assertEquals("luis.demo", matches.getFirst().get("alias"));
+        assertTrue(wallet.contacts(ana, "ana").isEmpty());
+        assertTrue(wallet.contacts(ana, "ops").isEmpty());
+        assertTrue(wallet.contacts(ana, "%").isEmpty());
+        given().cookie("wallet_session", ana).get("/api/contacts?q=luis")
+                .then().statusCode(200).body("alias", hasItem("luis.demo"));
     }
         @Test void customerPaymentNeedsNoProviderScenarioAndRetriesSafely() {
         String key = Wallet.id();
@@ -124,7 +161,7 @@ class WalletTest {
         String token = wallet.start(new Wallet.OnboardingStart("organico"));
         identity(token, "customer.demo", "900000019");
         post("/onboarding/complete", token, Map.of("name", "Persona Sintética", "alias", "customer.demo",
-            "phone", "900000019", "consent", true)).then().statusCode(200).body("status", equalTo("ACTIVE"));
+            "phone", "900000019", "consent", true, "pin", "123456")).then().statusCode(200).body("status", equalTo("ACTIVE"));
         }
         @Test void approvedPaymentIsAtomicAndReceiptPersists() {
         var p = pay("APPROVED", 1234);

@@ -10,15 +10,16 @@ Toda mutación usa `Content-Type: application/json`, un objeto JSON y `X-Wallet-
 |---|---|---|
 | GET | `/health` | Estado del proceso y modo sintético |
 | GET | `/experience` | `{"laboratory":false}` por defecto; disponibilidad de herramientas de evaluación |
-| POST | `/demo/login` | `{"userId":"ana.demo"}`; alias de una cuenta que completó registro, incluidos comercio y OPS; también acepta IDs de evaluación |
+| POST | `/demo/login` | `{"userId":"persona.demo","pin":"123456"}`; alias registrado y clave de seis dígitos. Los IDs de evaluación pueden omitir `pin`; las cuentas anteriores sin clave pueden ingresar una vez por alias para configurarla |
 | POST | `/logout` | `{}`; revoca sesión actual |
-| GET | `/me` | Cuenta, estado, saldo disponible, reservado y progreso de registro |
+| GET | `/me` | Cuenta, estado, saldo disponible, reservado, progreso de registro y `pin_setup_required` |
+| POST | `/profile/pin` | `{"pin":"123456"}`; configura una sola vez la clave de una cuenta anterior autenticada |
 | POST | `/onboarding/start` | `{"campaign":"organico"}`; cuenta pendiente + sesión |
 | POST | `/onboarding/step` | Paso `identity` con `name`, `alias`, `phone`, `consent:false`; luego paso `consent` con `consent:true` |
-| POST | `/onboarding/complete` | `name`, `alias`, `phone`, `consent:true`; resultado de identidad resuelto por el servidor |
-| GET | `/contacts` | Destinos activos no OPS, distintos de la propia cuenta |
+| POST | `/onboarding/complete` | `name`, `alias`, `phone`, `consent:true`, `pin` de seis dígitos; resultado de identidad resuelto por el servidor |
+| GET | `/contacts?q=<texto>` | Destinos activos no OPS, distintos de la propia cuenta; búsqueda parcial sin distinguir mayúsculas por nombre o alias. Sin `q`, devuelve hasta 100 |
 
-Identidad: nombre ficticio de 3–80 caracteres; alias `[a-z][a-z0-9.]{2,29}`; celular ficticio `9[0-9]{8}`. Alias y celular son únicos. Una cuenta pendiente/rechazada no puede pagar.
+Identidad: nombre ficticio de 3–80 caracteres; alias `[a-z][a-z0-9.]{2,29}`; celular ficticio `9[0-9]{8}`. La clave debe contener exactamente seis dígitos; se almacena como hash PBKDF2 con sal y cinco intentos fallidos bloquean el acceso durante 15 minutos. Las cuentas preexistentes sin clave requieren configurarla antes de usar la wallet. Alias y celular son únicos. Una cuenta pendiente/rechazada no puede pagar.
 
 ## Checkout, pagos y QR
 
@@ -91,9 +92,10 @@ El asistente devuelve `message`, `intent`, `trace_id`, `mode:LOCAL_RULE_BASED`, 
 ```
 
 - `400`: campos inválidos, monto, límite, saldo insuficiente, QR expirado, cuerpo no objeto JSON.
-- `401`: sesión ausente, revocada o vencida.
+- `401`: sesión ausente, revocada o vencida, o alias/clave incorrectos.
 - `403`: rol/propiedad, cuenta no activa, laboratorio deshabilitado o encabezado protector ausente.
 - `404`: recurso o alias de prueba no encontrado.
+- `429`: acceso bloqueado temporalmente tras cinco claves incorrectas.
 - `409`: conflicto de idempotencia, evento contradictorio, identidad ya usada o caso duplicado.
 - `413`: cuerpo demasiado grande.
 - `500`: error inesperado registrado en servidor; mensaje genérico sin detalles internos.
