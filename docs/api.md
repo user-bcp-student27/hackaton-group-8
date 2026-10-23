@@ -9,12 +9,13 @@ Toda mutación usa `Content-Type: application/json`, un objeto JSON y `X-Wallet-
 | Método | Ruta | Cuerpo / comportamiento |
 |---|---|---|
 | GET | `/health` | Estado del proceso y modo sintético |
-| POST | `/demo/login` | `{"userId":"demo-ana"}`; también `demo-luis`, `demo-merchant`, `demo-ops` o alias de un pagador que ya completó registro |
+| GET | `/experience` | `{"laboratory":false}` por defecto; disponibilidad de herramientas de evaluación |
+| POST | `/demo/login` | `{"userId":"ana.demo"}`; alias de una cuenta que completó registro, incluidos comercio y OPS; también acepta IDs de evaluación |
 | POST | `/logout` | `{}`; revoca sesión actual |
 | GET | `/me` | Cuenta, estado, saldo disponible, reservado y progreso de registro |
 | POST | `/onboarding/start` | `{"campaign":"organico"}`; cuenta pendiente + sesión |
 | POST | `/onboarding/step` | Paso `identity` con `name`, `alias`, `phone`, `consent:false`; luego paso `consent` con `consent:true` |
-| POST | `/onboarding/complete` | `name`, `alias`, `phone`, `consent:true`, `kyc`: `APPROVED`, `PENDING` o `DECLINED` |
+| POST | `/onboarding/complete` | `name`, `alias`, `phone`, `consent:true`; resultado de identidad resuelto por el servidor |
 | GET | `/contacts` | Destinos activos no OPS, distintos de la propia cuenta |
 
 Identidad: nombre ficticio de 3–80 caracteres; alias `[a-z][a-z0-9.]{2,29}`; celular ficticio `9[0-9]{8}`. Alias y celular son únicos. Una cuenta pendiente/rechazada no puede pagar.
@@ -38,12 +39,13 @@ Ejemplo de pago:
   "destination": "luis.demo",
   "amount": 1234,
   "channel": "ALIAS",
-  "scenario": "APPROVED",
   "qrId": null
 }
 ```
 
-`scenario` es una **herramienta de fault injection de esta demo**, no un campo que un cliente financiero real debería poder controlar:
+Los clientes omiten `scenario` y `kyc`. El adaptador local responde `APPROVED` por defecto; no es una consulta a un proveedor real. Solo con `WALLET_LAB_ENABLED=true` se aceptan los campos opcionales de laboratorio `scenario` (`APPROVED`, `DECLINED`, `PENDING`, `TIMEOUT`) y `kyc` (`APPROVED`, `PENDING`, `DECLINED`). Fuera del laboratorio, enviarlos devuelve `403 LAB_DISABLED`. Las rutas OPS de callback y fixture también requieren laboratorio habilitado, además de su autorización por rol.
+
+Resultados del proveedor local:
 
 | Proveedor mock | Estado Wallet | Efecto |
 |---|---|---|
@@ -90,7 +92,7 @@ El asistente devuelve `message`, `intent`, `trace_id`, `mode:LOCAL_RULE_BASED`, 
 
 - `400`: campos inválidos, monto, límite, saldo insuficiente, QR expirado, cuerpo no objeto JSON.
 - `401`: sesión ausente, revocada o vencida.
-- `403`: rol/propiedad, cuenta no activa o encabezado protector ausente.
+- `403`: rol/propiedad, cuenta no activa, laboratorio deshabilitado o encabezado protector ausente.
 - `404`: recurso o alias de prueba no encontrado.
 - `409`: conflicto de idempotencia, evento contradictorio, identidad ya usada o caso duplicado.
 - `413`: cuerpo demasiado grande.
@@ -112,7 +114,6 @@ $body = @{
   destination = 'luis.demo'
   amount = 1234
   channel = 'ALIAS'
-  scenario = 'APPROVED'
   qrId = $null
 } | ConvertTo-Json
 

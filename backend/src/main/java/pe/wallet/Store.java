@@ -4,6 +4,7 @@ import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.h2.jdbcx.JdbcDataSource;
 import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.time.Instant;
@@ -13,13 +14,14 @@ import java.util.*;
 @ApplicationScoped
 public class Store {
     @ConfigProperty(name = "wallet.db.url") String url;
+    private final JdbcDataSource dataSource = new JdbcDataSource();
 
     @FunctionalInterface
     public interface Work<T> { T run(Connection connection) throws Exception; }
 
     // One process owns this local store. SERIALIZABLE transactions also protect the DB constraints.
     public synchronized <T> T tx(Work<T> work) {
-        try (Connection connection = DriverManager.getConnection(url, "sa", "")) {
+        try (Connection connection = dataSource.getConnection()) {
             connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
             connection.setAutoCommit(false);
             try {
@@ -38,6 +40,9 @@ public class Store {
 
     @PostConstruct
     void init() {
+        dataSource.setURL(url);
+        dataSource.setUser("sa");
+        dataSource.setPassword("");
         tx(c -> {
             try (var resource = Store.class.getResourceAsStream("/schema.sql")) {
                 if (resource == null) throw new IllegalStateException("Missing schema");

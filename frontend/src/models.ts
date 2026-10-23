@@ -18,7 +18,7 @@ export interface Payment {
   retry_allowed: boolean; dispute_allowed: boolean; investigation_allowed: boolean; duplicate?: boolean;
   ledger?: Ledger[]; cases?: SupportCase[];
 }
-export interface PaymentInput { destination: string; amount: number; channel: 'ALIAS' | 'QR'; scenario: Outcome; qrId: string | null }
+export interface PaymentInput { destination: string; amount: number; channel: 'ALIAS' | 'QR'; scenario?: Outcome; qrId: string | null }
 export interface Qr { id: string; merchant_id: string; name: string; alias: string; amount: number; expires_at: string; image?: string }
 export interface Mismatch { id: string; payment_id: string; kind: string; status: string }
 export interface ReconciliationRow { payment: Payment; provider: {status: string; amount: number} | null; issues: Mismatch[]; matched: boolean; duplicate_requests: number }

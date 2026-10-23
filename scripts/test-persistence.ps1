@@ -12,6 +12,7 @@ $server = $null
 function Start-TestServer {
     $info = [Diagnostics.ProcessStartInfo]::new('java')
     $info.UseShellExecute = $false
+    $info.RedirectStandardOutput = $true
     $info.ArgumentList.Add("-Dquarkus.http.port=$Port")
     $info.ArgumentList.Add("-Dwallet.db.url=jdbc:h2:file:$database;DB_CLOSE_ON_EXIT=FALSE;WRITE_DELAY=0")
     $info.ArgumentList.Add('-jar')
@@ -21,13 +22,13 @@ function Start-TestServer {
     try {
         for ($n = 0; $n -lt 40; $n++) {
             if ($process.HasExited) { throw 'El servidor de prueba termino antes de estar listo.' }
-            try {
+            $line = $process.StandardOutput.ReadLineAsync()
+            if (-not $line.Wait(30000)) { throw 'El servidor no notifico su inicio a tiempo.' }
+            $output = $line.GetAwaiter().GetResult()
+            if ($null -eq $output) { throw 'El servidor cerro su salida antes de estar listo.' }
+            if ($output -match 'Listening on:') {
                 $health = Invoke-RestMethod "$base/health" -TimeoutSec 2
                 if ($health.status -eq 'UP') { $ready = $true; return $process }
-            } catch [System.Net.Http.HttpRequestException] {
-                Start-Sleep -Milliseconds 250
-            } catch [System.OperationCanceledException] {
-                Start-Sleep -Milliseconds 250
             }
         }
         throw 'El servidor de prueba no respondio a tiempo.'
@@ -43,7 +44,7 @@ try {
     $headers = @{ 'X-Wallet-Request' = '1' }
     Invoke-RestMethod "$base/demo/login" -Method Post -Headers $headers -ContentType 'application/json' -Body '{"userId":"demo-ana"}' -SessionVariable session | Out-Null
     $headers['Idempotency-Key'] = [Guid]::NewGuid().ToString()
-    $body = '{"destination":"luis.demo","amount":1234,"channel":"ALIAS","scenario":"APPROVED"}'
+    $body = '{"destination":"luis.demo","amount":1234,"channel":"ALIAS"}'
     $first = Invoke-RestMethod "$base/payments" -Method Post -Headers $headers -ContentType 'application/json' -Body $body -WebSession $session
     $before = Invoke-RestMethod "$base/me" -WebSession $session
     Stop-Process -Id $server.Id

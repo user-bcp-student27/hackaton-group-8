@@ -1,10 +1,10 @@
-# Demo Arena · seis minutos
+# Recorrido de producto · seis minutos
 
 Preparación: ejecutar el build y servidor descritos en [README](../README.md), abrir `http://127.0.0.1:8080` y tener a mano una carpeta donde descargar el QR. Todos los nombres y datos son ficticios.
 
 ## 0:00–0:40 · Problema y frontera
 
-Explicar el abandono en checkout, onboarding lento y necesidad del comercio de saber si puede entregar. Mostrar el rótulo “entorno de demostración”. Dominio, ledger, estados e idempotencia son reales dentro de la aplicación; identidad, proveedores y fondos son simulados.
+Explicar el abandono en checkout, onboarding lento y necesidad del comercio de saber si puede entregar. Mostrar el rótulo “Versión de prueba · Sin dinero real”. Dominio, ledger, estados e idempotencia son reales dentro de la aplicación; identidad, proveedores y fondos son simulados. El laboratorio está deshabilitado por defecto.
 
 Las metas del trimestre no se presentan como resultados reales.
 
@@ -12,19 +12,19 @@ Las metas del trimestre no se presentan como resultados reales.
 
 1. Crear wallet de prueba.
 2. Ingresar nombre, alias y celular inventados, por ejemplo un alias todavía no usado y nueve dígitos que comiencen con `9`.
-3. Mostrar el consentimiento y KYC mock aprobado.
+3. Mostrar el consentimiento y el resumen de datos; finalizar sin seleccionar resultados de identidad.
 4. Mostrar la wallet activa y los S/ 500 sintéticos.
 
-Para demostrar HITL en preguntas: repetir con KYC pendiente y aprobar desde Operaciones.
+Para volver a la cuenta, cerrar sesión e ingresar el alias en la pantalla de acceso. La revisión de cuentas pendientes pertenece a Operaciones, no al usuario que se registra.
 
 ## 1:25–2:15 · W2 y W4: pagar sin duplicar
 
-1. Enviar S/ 12.34 a `luis.demo`, escenario aprobado.
+1. Ingresar por alias `ana.demo` y enviar S/ 12.34 a `luis.demo`.
 2. Mostrar nombre y monto antes de confirmar.
-3. Mostrar resultado exitoso, referencia y ledger.
-4. Cerrar comprobante y pulsar “Consultar mismo intento”.
+3. Mostrar resultado exitoso, referencia y acciones del comprobante, sin códigos ni ledger.
+4. Cerrar comprobante y pulsar “Consultar mi pago”.
 5. Mostrar la misma referencia y saldo sin un segundo cargo.
-6. Cerrar el intento terminal para habilitar un pago nuevo.
+6. Pulsar “Volver a mi wallet” o “Hacer otro pago”; no hay cierre técnico de intentos para el usuario.
 
 ## 2:15–3:00 · W3: cobrar con QR
 
@@ -36,14 +36,16 @@ Para demostrar HITL en preguntas: repetir con KYC pendiente y aprobar desde Oper
 
 ## 3:00–4:00 · W5: pendiente, ayuda y soporte
 
-1. Como pagador, crear un pago de S/ 1 con escenario `PENDING`.
+Esta sección y la siguiente son una evaluación técnica opcional, separada del recorrido del cliente. Reiniciar el servidor con `$env:WALLET_LAB_ENABLED = 'true'` para habilitarla; nunca habilitar el laboratorio en una exposición pública. El contrato está en [API](api.md). La suite Playwright crea estos estados sin exponer selectores al cliente.
+
+1. Mediante la API de laboratorio, crear un pago de S/ 1 con `scenario: "PENDING"` y consultarlo desde Movimientos del pagador.
 2. Mostrar reserva y advertencia de no repetir el pago.
 3. Preguntar a Inti Guía por el resultado. Mostrar que solo explica.
 4. Ingresar como Operaciones, abrir transacción y el laboratorio del proveedor.
 5. Enviar callback `APPROVED`.
 6. Volver al pagador/comercio: el estado cambia al consultar o dentro de 5 segundos.
 
-Para demostrar reverso, en un pago exitoso abrir “Ayuda y revisión humana”, elegir solicitud de reverso y escribir un motivo. Operaciones registra una nota y aprueba el reverso simulado. Se mantiene `SUCCEEDED` con marca de reverso y asientos compensatorios.
+Para demostrar devolución (disponible también sin laboratorio), en un pago exitoso abrir “Ayuda y revisión humana”, elegir “Solicitar devolución” y escribir un motivo. Operaciones registra una nota y aprueba. Se mantiene `SUCCEEDED` con marca de reverso y asientos compensatorios; el cliente ve “Dinero devuelto”.
 
 ## 4:00–5:00 · W6: detectar y corregir un descalce
 
@@ -58,9 +60,10 @@ No se modifica el ledger para esconder la diferencia.
 ## 5:00–6:00 · Evidencia y límites
 
 - Mostrar Métricas MVP: tres meses, eventos reales de la demo y gasto por campaña; no se inventan MAU.
-- Mostrar [evidencia](../evidence.md): 28 pruebas backend, 20 UI y reinicio persistente.
+- Mostrar [evidencia](../evidence.md): 30 pruebas backend, 24 UI y reinicio persistente.
 - Explicar por qué no hay LLM externo: asistente local verificable, sin herramientas financieras ni transmisión de datos.
 - Declarar pendientes: identidad real, contratos de proveedores, antifraude, producción, revisión regulatoria y publicación en repositorio dedicado.
+- Volver a iniciar sin `WALLET_LAB_ENABLED` para dejar la experiencia habitual sin laboratorio.
 
 ## Contingencia
 

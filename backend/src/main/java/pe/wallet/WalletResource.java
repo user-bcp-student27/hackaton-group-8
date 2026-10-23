@@ -6,6 +6,7 @@ import com.google.zxing.common.HybridBinarizer;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.*;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.util.*;
@@ -16,11 +17,16 @@ import javax.imageio.ImageIO;
 @Consumes(MediaType.APPLICATION_JSON)
 public class WalletResource {
     @Inject Wallet wallet;
+    @ConfigProperty(name = "wallet.lab.enabled", defaultValue = "false") boolean labEnabled;
     @CookieParam("wallet_session") String token;
     public record Login(String userId) {}
     public record QrInput(Long amount) {}
     public record QrImage(String image) {}
     public record KycDecision(String decision) {}
+
+    private void laboratory() {
+        if (!labEnabled) throw new ApiError(403, "LAB_DISABLED", "Las herramientas de prueba no están habilitadas.");
+    }
 
     private Response session(String token) {
         NewCookie cookie = new NewCookie.Builder("wallet_session").value(token).path("/api")
@@ -29,6 +35,8 @@ public class WalletResource {
     }
     @GET @Path("/health")
     public Map<String, Object> health() { return Map.of("status", "UP", "mode", "SYNTHETIC_DEMO", "version", "1.0.0"); }
+    @GET @Path("/experience")
+    public Object experience() { return Map.of("laboratory", labEnabled); }
     @POST @Path("/demo/login")
     public Response login(Login input) { return session(wallet.login(input.userId())); }
     @POST @Path("/logout")
@@ -39,7 +47,11 @@ public class WalletResource {
     @POST @Path("/onboarding/start")
     public Response start(Wallet.OnboardingStart input) { return session(wallet.start(input)); }
     @POST @Path("/onboarding/complete")
-    public Object complete(Wallet.OnboardingComplete input) { return wallet.complete(token, input); }
+    public Object complete(Wallet.OnboardingComplete input) {
+        if (input.kyc() != null) laboratory();
+        return wallet.complete(token, new Wallet.OnboardingComplete(input.name(), input.alias(), input.phone(), input.consent(),
+                input.kyc() == null ? "APPROVED" : input.kyc()));
+    }
     @POST @Path("/onboarding/step")
     public Object step(Wallet.OnboardingStep input) { return wallet.onboardingStep(token, input); }
     @GET @Path("/me")
@@ -49,7 +61,11 @@ public class WalletResource {
     @POST @Path("/checkout/start")
     public Object checkout(Wallet.CheckoutInput input) { wallet.startCheckout(token, input.attemptId()); return Map.of("ok", true); }
     @POST @Path("/payments")
-    public Object pay(@HeaderParam("Idempotency-Key") String key, Wallet.PaymentInput input) { return wallet.pay(token, key, input); }
+    public Object pay(@HeaderParam("Idempotency-Key") String key, Wallet.PaymentInput input) {
+        if (input.scenario() != null) laboratory();
+        return wallet.pay(token, key, new Wallet.PaymentInput(input.destination(), input.amount(), input.channel(),
+                input.scenario() == null ? "APPROVED" : input.scenario(), input.qrId()));
+    }
     @GET @Path("/payments")
     public Object history(@QueryParam("date") String day, @QueryParam("reference") String reference, @QueryParam("channel") String channel) {
         return wallet.history(token, day, reference, channel);
@@ -101,9 +117,9 @@ public class WalletResource {
     @POST @Path("/ops/cases/{id}")
     public Object decide(@PathParam("id") String id, Wallet.CaseDecision input) { return wallet.decideCase(token, id, input); }
     @POST @Path("/ops/payments/{id}/callback")
-    public Object callback(@PathParam("id") String id, Wallet.CallbackInput input) { return wallet.callback(token, id, input); }
+    public Object callback(@PathParam("id") String id, Wallet.CallbackInput input) { laboratory(); return wallet.callback(token, id, input); }
     @POST @Path("/ops/payments/{id}/fixture")
-    public Object fixture(@PathParam("id") String id, Wallet.FixtureInput input) { wallet.fixture(token, id, input); return Map.of("ok", true); }
+    public Object fixture(@PathParam("id") String id, Wallet.FixtureInput input) { laboratory(); wallet.fixture(token, id, input); return Map.of("ok", true); }
     @GET @Path("/ops/onboarding")
     public Object queue() { return wallet.onboardingQueue(token); }
     @POST @Path("/ops/onboarding/{id}")

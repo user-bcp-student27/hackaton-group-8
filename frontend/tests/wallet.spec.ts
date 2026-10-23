@@ -3,6 +3,7 @@ import { test, expect, Page, APIRequestContext } from '@playwright/test';
 const headers = {'X-Wallet-Request': '1'};
 async function login(page: Page, name = 'Ana Torres') {
   await page.goto('/');
+  await page.getByText('Cuentas de evaluación', {exact: true}).click();
   await page.getByRole('button', {name: new RegExp(name)}).click();
   await expect(page.getByRole('button', {name: 'Cerrar sesión'})).toBeVisible();
 }
@@ -23,19 +24,19 @@ test('W1: onboarding guiado persiste pasos y activa saldo', async ({page}) => {
   await page.getByLabel('Tu alias', {exact: true}).fill(`test.${suffix}`);
   await page.getByLabel('Celular ficticio', {exact: true}).fill(`91${suffix}`);
   await page.getByRole('button', {name: /Continuar/}).click();
-  await expect(page.getByText('Una demo, sin letra pequeña.')).toBeVisible();
+  await expect(page.getByText('Antes de continuar', {exact: true})).toBeVisible();
   await page.reload();
-  await expect(page.getByText('Una demo, sin letra pequeña.')).toBeVisible();
+  await expect(page.getByText('Antes de continuar', {exact: true})).toBeVisible();
   await page.getByRole('checkbox').check();
   await page.getByRole('button', {name: /Continuar/}).click();
-  await page.getByLabel('Resultado del KYC simulado').selectOption('APPROVED');
+  await expect(page.getByLabel('Resultado del KYC simulado')).toHaveCount(0);
+  await expect(page.getByRole('heading', {name: 'Confirma tus datos'})).toBeVisible();
   await page.getByRole('button', {name: 'Finalizar registro'}).click();
   await expect(page.getByRole('heading', {name: /Hola, Persona/})).toBeVisible();
   await expect(page.locator('.balance-amount')).toContainText('500.00');
   await page.getByRole('button', {name: 'Cerrar sesión'}).click();
-  await page.getByText('¿Ya creaste una wallet de prueba?').click();
-  await page.getByLabel('Alias de tu wallet sintética').fill(`test.${suffix}`);
-  await page.getByRole('button', {name: 'Recuperar wallet por alias'}).click();
+  await page.getByLabel('Alias de tu wallet', {exact: true}).fill(`test.${suffix}`);
+  await page.getByRole('button', {name: 'Ingresar', exact: true}).click();
   await expect(page.getByRole('heading', {name: /Hola, Persona/})).toBeVisible();
 });
 
@@ -47,6 +48,7 @@ test('W2/W4: pago, comprobante y reintento conservan referencia y saldo', async 
   await page.getByRole('button', {name: 'Enviar A un contacto'}).click();
   await page.getByLabel('Destino', {exact: true}).selectOption('luis.demo');
   await page.getByLabel('Monto en soles').fill('12.34');
+  await expect(page.getByLabel('Escenario del proveedor mock')).toHaveCount(0);
   await page.getByRole('button', {name: /Revisar pago/}).click();
   await expect(page.getByRole('heading', {name: 'Luis Ramos', exact: true})).toBeVisible();
   await page.getByRole('button', {name: 'Confirmar pago', exact: true}).click();
@@ -54,13 +56,13 @@ test('W2/W4: pago, comprobante y reintento conservan referencia y saldo', async 
   await expect(dialog.getByRole('heading', {name: 'Exitoso', exact: true})).toBeVisible();
   const reference = await dialog.locator('.review-line code').first().textContent();
   await dialog.getByRole('button', {name: 'Cerrar comprobante'}).click();
-  await page.getByRole('button', {name: 'Consultar mismo intento'}).click();
+  await page.getByRole('button', {name: 'Consultar mi pago'}).click();
   await expect(dialog.locator('.review-line code').first()).toHaveText(reference!);
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
   await page.reload();
-  await expect(page.getByRole('button', {name: 'Consultar mismo intento'})).toBeVisible();
-  await page.getByRole('button', {name: /Cerrar intento terminal/}).click();
+  await expect(page.getByRole('button', {name: 'Consultar mi pago'})).toBeVisible();
+  await page.getByRole('button', {name: 'Hacer otro pago', exact: true}).click();
   await page.getByRole('button', {name: 'Mi wallet', exact: false}).click();
   const balanceAfter = await page.locator('.balance-amount').textContent();
   expect(balanceAfter).not.toBe(balanceBefore);
@@ -74,6 +76,7 @@ test('W3: generar PNG como comercio, leerlo y pagar como usuario', async ({page}
   const src = await page.getByAltText('QR de cobro del comercio').getAttribute('src');
   expect(src).toContain('data:image/png;base64,');
   await page.getByRole('button', {name: 'Cerrar sesión'}).click();
+  await page.getByText('Cuentas de evaluación', {exact: true}).click();
   await page.getByRole('button', {name: /Luis Ramos/}).click();
   await page.getByLabel('Cargar QR para pagar').setInputFiles({name: 'inti-qr.png', mimeType: 'image/png', buffer: Buffer.from(src!.split(',')[1], 'base64')});
   await expect(page.getByRole('heading', {name: 'QR leído correctamente'})).toBeVisible();
@@ -138,7 +141,9 @@ test('validación de rechazo permite corregir sin bloquear el formulario', async
   await page.getByRole('button', {name: /Revisar pago/}).click();
   await expect(page.getByRole('alert')).toContainText('no superar');
   await page.getByLabel('Monto en soles').fill('1.00');
-  await page.getByLabel('Escenario del proveedor mock').selectOption('DECLINED');
+  await page.route('**/api/payments', async route => {
+    await route.continue({postData: JSON.stringify({...route.request().postDataJSON(), scenario: 'DECLINED'})});
+  }, {times: 1});
   await page.getByRole('button', {name: /Revisar pago/}).click();
   await page.getByRole('button', {name: 'Confirmar pago', exact: true}).click();
   await expect(page.getByRole('dialog').getByRole('heading', {name: 'Rechazado', exact: true})).toBeVisible();
@@ -161,7 +166,7 @@ test('respuesta perdida recupera el mismo intento tras recargar', async ({page})
   await expect(page.getByRole('alert')).toContainText('No se pudo conectar');
   expect(originalId).toBeTruthy();
   await page.reload();
-  await page.getByRole('button', {name: 'Consultar mismo intento'}).click();
+  await page.getByRole('button', {name: 'Consultar mi pago'}).click();
   await expect(page.getByRole('dialog').locator('.review-line code').first()).toHaveText(originalId);
   await expect(page.getByRole('dialog').getByRole('heading', {name: 'Exitoso', exact: true})).toBeVisible();
 });
@@ -181,9 +186,10 @@ test('reverso necesita solicitud y aprobación humana desde la UI', async ({page
   const note = `Reverso sintético ${payment.id}`;
   await page.getByLabel('Describe el motivo, sin datos personales').fill(note);
   await page.getByRole('button', {name: 'Enviar a soporte humano'}).click();
-  await expect(dialog.getByText('REVERSAL · Abierto')).toBeVisible();
+  await expect(dialog.getByText('Solicitud de devolución · Abierto')).toBeVisible();
   await dialog.getByRole('button', {name: 'Cerrar comprobante'}).click();
   await page.getByRole('button', {name: 'Cerrar sesión'}).click();
+  await page.getByText('Cuentas de evaluación', {exact: true}).click();
   await page.getByRole('button', {name: /Operaciones/}).click();
   await page.getByLabel('Motivo de resolución (5–400 caracteres)').fill('Aprobación humana para devolución de prueba');
   const support = page.locator('.case-item').filter({has: page.getByText(note, {exact: true})});
@@ -206,4 +212,45 @@ test('operaciones muestra tres meses y gasto atribuido por campaña', async ({pa
   await expect(page.getByRole('status')).toContainText('Gasto de adquisición guardado');
   await page.getByText(/detalle de atribución por campaña/).first().click();
   await expect(page.getByRole('cell', {name: 'organico', exact: true})).toBeVisible();
+});
+
+test('cliente vuelve a su wallet y puede pagar otra vez sin cerrar intentos manualmente', async ({page}) => {
+  await page.goto('/');
+  await page.getByLabel('Alias de tu wallet', {exact: true}).fill('ana.demo');
+  await page.getByRole('button', {name: 'Ingresar', exact: true}).click();
+  await page.getByRole('button', {name: 'Enviar A un contacto'}).click();
+  await page.getByLabel('Destino', {exact: true}).selectOption('luis.demo');
+  await page.getByLabel('Monto en soles').fill('0.01');
+  await page.getByRole('button', {name: /Revisar pago/}).click();
+  await page.getByRole('button', {name: 'Confirmar pago', exact: true}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText(/Ledger|PROVIDER_|APPROVED|idempotencia/)).toHaveCount(0);
+  await dialog.getByRole('button', {name: 'Volver a mi wallet', exact: true}).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator('.balance-amount')).toBeVisible();
+  await page.getByRole('button', {name: 'Enviar A un contacto'}).click();
+  await expect(page.getByLabel('Destino', {exact: true})).toBeEnabled();
+  await expect(page.getByRole('button', {name: 'Consultar mi pago'})).toHaveCount(0);
+});
+
+test('comercio espera confirmación antes de entregar y conserva su vista al recargar', async ({page, playwright}) => {
+  const setup = await playwright.request.newContext({baseURL: 'http://127.0.0.1:8090'});
+  await setup.post('/api/demo/login', {headers, data: {userId: 'demo-merchant'}});
+  const qr = await (await setup.post('/api/qr', {headers, data: {amount: 1}})).json();
+  await setup.post('/api/demo/login', {headers, data: {userId: 'demo-ana'}});
+  const payment = await (await setup.post('/api/payments', {headers: {...headers, 'Idempotency-Key': crypto.randomUUID()},
+    data: {destination: 'cafe.demo', amount: 1, channel: 'QR', qrId: qr.id, scenario: 'PENDING'}})).json();
+  await page.goto('/');
+  await page.getByLabel('Alias de tu wallet', {exact: true}).fill('cafe.demo');
+  await page.getByRole('button', {name: 'Ingresar', exact: true}).click();
+  await page.reload();
+  await expect(page.getByRole('heading', {name: 'Cobra con confianza.'})).toBeVisible();
+  await page.locator('.transaction-row').filter({hasText: payment.id.slice(0, 8)}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Aún no está confirmado. Espera antes de entregar el producto o servicio.')).toBeVisible();
+  await setup.post('/api/demo/login', {headers, data: {userId: 'demo-ops'}});
+  const callback = await setup.post(`/api/ops/payments/${payment.id}/callback`, {headers, data: {eventId: crypto.randomUUID(), outcome: 'APPROVED'}});
+  expect(callback.ok()).toBeTruthy();
+  await expect(dialog.getByText('Cobro confirmado. Puedes entregar el producto o servicio.')).toBeVisible({timeout: 12000});
+  await setup.dispose();
 });

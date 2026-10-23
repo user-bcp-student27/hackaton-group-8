@@ -17,6 +17,7 @@ interface Attempt { key: string; input: PaymentInput }
 export class App implements OnInit, OnDestroy {
   user = signal<User | null>(null);
   ready = signal(false);
+  laboratory = signal(false);
   busy = signal(false);
   error = signal('');
   notice = signal('');
@@ -40,7 +41,6 @@ export class App implements OnInit, OnDestroy {
   attempt = signal<Attempt | null>(null);
   destination = '';
   amount = '';
-  scenario: Outcome = 'APPROVED';
   channel: 'ALIAS' | 'QR' = 'ALIAS';
   qrAmount = '25.00';
   filterDate = '';
@@ -51,7 +51,7 @@ export class App implements OnInit, OnDestroy {
   month = this.today().slice(0, 7);
   campaign = 'organico';
   spend = '';
-  name = ''; alias = ''; phone = ''; consent = false; kyc: 'APPROVED' | 'PENDING' | 'DECLINED' = 'APPROVED';
+  name = ''; alias = ''; phone = ''; consent = false;
   caseCategory = 'TECHNICAL';
   caseNote = '';
   decisionNote = '';
@@ -66,7 +66,9 @@ export class App implements OnInit, OnDestroy {
 
   async ngOnInit(): Promise<void> {
     try {
+      this.laboratory.set((await api<{laboratory: boolean}>('/experience')).laboratory);
       this.user.set(await api<User>('/me'));
+      this.view.set(this.user()?.role === 'OPS' ? 'operations' : this.user()?.role === 'MERCHANT' ? 'merchant' : 'home');
       await this.loadData();
       if (this.user()?.completed_at === null) {
         this.registering.set(true);
@@ -91,6 +93,12 @@ export class App implements OnInit, OnDestroy {
   date(value: string): string { return new Intl.DateTimeFormat('es-PE', {timeZone: 'America/Lima', dateStyle: 'medium', timeStyle: 'short'}).format(new Date(value)); }
   status(value: string): string {
     return ({ SUCCEEDED: 'Exitoso', FAILED: 'Rechazado', EXPIRED: 'Expirado', PENDING: 'Pendiente', ACTIVE: 'Activa', REJECTED: 'Rechazada', OPEN: 'Abierto', RESOLVED: 'Resuelto', INVESTIGATING: 'En investigación' } as Record<string, string>)[value] ?? value;
+  }
+  reason(value: string): string {
+    return ({PROVIDER_APPROVED: 'Pago confirmado', PROVIDER_DECLINED: 'El proveedor no aceptó el pago', PROVIDER_TIMEOUT: 'Venció el plazo de confirmación', AWAITING_PROVIDER: 'Esperando confirmación'} as Record<string, string>)[value] ?? 'Consulta a soporte con tu referencia';
+  }
+  category(value: string): string {
+    return ({TECHNICAL: 'Problema con el pago', DISPUTE: 'Revisión de pago', REVERSAL: 'Solicitud de devolución'} as Record<string, string>)[value] ?? value;
   }
   personName(): string { return this.user()?.name.split(' ')[0] ?? ''; }
   latest(): Payment[] { return this.payments().slice(0, 4); }
@@ -146,8 +154,8 @@ export class App implements OnInit, OnDestroy {
     await this.run(async () => {
       await api('/demo/login', { userId: profile });
       this.user.set(await api<User>('/me'));
-      this.view.set(profile === 'demo-merchant' ? 'merchant' : profile === 'demo-ops' ? 'operations' : 'home');
-      this.selected.set(null); this.attempt.set(null); this.agent.set(null); this.registering.set(false);
+      this.view.set(this.user()?.role === 'MERCHANT' ? 'merchant' : this.user()?.role === 'OPS' ? 'operations' : 'home');
+      this.selected.set(null); this.attempt.set(null); this.agent.set(null); this.registering.set(false); this.reviewing.set(false); this.qr.set(null); this.scanned.set(null);
       this.agentPaymentId.set(null);
       await this.loadData();
       this.restoreAttempt();
@@ -186,15 +194,15 @@ export class App implements OnInit, OnDestroy {
   }
   async finishOnboarding(): Promise<void> {
     await this.run(async () => {
-      this.user.set(await api<User>('/onboarding/complete', {name: this.name, alias: this.alias, phone: this.phone, consent: this.consent, kyc: this.kyc}));
+      this.user.set(await api<User>('/onboarding/complete', {name: this.name, alias: this.alias, phone: this.phone, consent: this.consent}));
       this.registering.set(false); this.view.set('home'); await this.loadData();
-      this.notice.set(this.user()?.status === 'ACTIVE' ? '¡Tu wallet está activa! Recibiste S/ 500 de prueba.' : 'Validación mock completada. Revisa el estado de tu cuenta.');
+      this.notice.set(this.user()?.status === 'ACTIVE' ? 'Tu wallet está lista. Tienes S/ 500 de saldo de prueba para empezar.' : 'Estamos revisando tu cuenta. Puedes consultar el estado aquí.');
     });
   }
   navigate(view: View): void { this.view.set(view); this.error.set(''); this.notice.set(''); }
   preparePay(contact?: Contact): void {
     if (this.attempt()) { this.error.set('Primero consulta o cierra el intento anterior desde el formulario de pago.'); this.view.set('pay'); return; }
-    this.destination = contact?.alias ?? ''; this.amount = ''; this.scenario = 'APPROVED'; this.channel = 'ALIAS';
+    this.destination = contact?.alias ?? ''; this.amount = ''; this.channel = 'ALIAS';
     this.reviewKey = null;
     this.scanned.set(null); this.reviewing.set(false); this.navigate('pay');
   }
@@ -203,7 +211,8 @@ export class App implements OnInit, OnDestroy {
     try {
       if (!this.contacts().some(c => c.alias === this.destination)) throw new Error('Selecciona un destino antes de continuar.');
       cents(this.amount, this.channel === 'QR' ? 15000 : 20000);
-      if (this.channel === 'QR' && !this.scanned()) throw new Error('Carga primero un QR de prueba.');
+      if (cents(this.amount, this.channel === 'QR' ? 15000 : 20000) > (this.user()?.balance ?? 0)) throw new Error('Tu saldo disponible no alcanza. Ingresa un monto menor.');
+      if (this.channel === 'QR' && !this.scanned()) throw new Error('Selecciona primero la imagen del QR del comercio.');
       await this.run(async () => {
         this.reviewKey ??= crypto.randomUUID();
         await api('/checkout/start', {attemptId: this.reviewKey});
@@ -217,7 +226,7 @@ export class App implements OnInit, OnDestroy {
       let attempt = this.attempt();
       if (!attempt) {
         attempt = {key: this.reviewKey ?? crypto.randomUUID(), input: {destination: this.destination, amount: cents(this.amount, this.channel === 'QR' ? 15000 : 20000),
-          channel: this.channel, scenario: this.scenario, qrId: this.scanned()?.id ?? null}};
+          channel: this.channel, qrId: this.scanned()?.id ?? null}};
         this.attempt.set(attempt);
         sessionStorage.setItem(`inti-attempt-${this.user()?.id}`, JSON.stringify(attempt));
       }
@@ -234,7 +243,7 @@ export class App implements OnInit, OnDestroy {
       }
       this.selected.set(await api<Payment>(`/payments/${result.id}`));
       this.reviewing.set(false); this.user.set(await api<User>('/me')); await this.loadData();
-      this.notice.set(result.duplicate ? 'Mismo intento recuperado. No se generó un segundo cargo.' : 'Intento registrado. Consulta el resultado y tu comprobante.');
+      this.notice.set(result.duplicate ? 'Recuperamos tu pago. No se realizó un segundo cobro.' : result.status === 'SUCCEEDED' ? 'Tu pago se realizó correctamente.' : result.status === 'PENDING' ? 'Estamos confirmando tu pago. No vuelvas a enviarlo.' : 'El pago no se realizó. Tu saldo está disponible.');
     });
   }
   restoreAttempt(): void {
@@ -246,26 +255,33 @@ export class App implements OnInit, OnDestroy {
           && typeof value.input === 'object' && value.input !== null && 'amount' in value.input && typeof value.input.amount === 'number'
           && 'destination' in value.input && typeof value.input.destination === 'string'
           && 'channel' in value.input && (value.input.channel === 'ALIAS' || value.input.channel === 'QR')
-          && 'scenario' in value.input && typeof value.input.scenario === 'string' && ['APPROVED', 'DECLINED', 'PENDING', 'TIMEOUT'].includes(value.input.scenario)
+          && (!('scenario' in value.input) || (typeof value.input.scenario === 'string' && ['APPROVED', 'DECLINED', 'PENDING', 'TIMEOUT'].includes(value.input.scenario)))
           && 'qrId' in value.input && (value.input.qrId === null || typeof value.input.qrId === 'string')) {
         this.attempt.set({key: value.key, input: {amount: value.input.amount, destination: value.input.destination, channel: value.input.channel,
-          scenario: value.input.scenario as Outcome, qrId: value.input.qrId}});
+          ...('scenario' in value.input ? {scenario: value.input.scenario as Outcome} : {}), qrId: value.input.qrId}});
         this.view.set('pay');
-        this.notice.set('Hay un intento guardado. Consulta el mismo intento antes de crear otro.');
+        this.notice.set('Tienes un pago por consultar. Recupera su resultado antes de enviar otro.');
       } else throw new Error('El intento guardado tiene formato inválido. Contacta a operaciones antes de volver a pagar.');
     } catch (error) { this.handle(error); }
   }
-  async closeAttempt(): Promise<void> {
+  async closeAttempt(next: 'home' | 'pay' = 'pay'): Promise<void> {
     await this.run(async () => {
       const attempt = this.attempt();
       if (!attempt) return;
       const result = await api<Payment>('/payments', attempt.input, {'Idempotency-Key': attempt.key});
-      if (result.status === 'PENDING') throw new Error('Este intento sigue pendiente. Espera un callback o escala a soporte; no crees un nuevo pago.');
+      if (result.status === 'PENDING') { this.selected.set(await api<Payment>(`/payments/${result.id}`)); throw new Error('Tu pago sigue en proceso. Consulta su estado o solicita ayuda; no lo envíes de nuevo.'); }
       sessionStorage.removeItem(`inti-attempt-${this.user()?.id}`);
       this.attempt.set(null); this.reviewing.set(false); this.amount = ''; this.scanned.set(null); this.channel = 'ALIAS';
       this.reviewKey = null;
-      this.notice.set('Intento terminal cerrado. Ya puedes preparar un pago nuevo.');
+      this.selected.set(null); this.view.set(next);
+      this.user.set(await api<User>('/me')); await this.loadData();
+      this.notice.set('Puedes consultar tu comprobante en Movimientos.');
     });
+  }
+  async finishPayment(next: 'home' | 'pay'): Promise<void> {
+    const payment = this.selected();
+    if (this.attempt() && payment?.payer_id === this.user()?.id) await this.closeAttempt(next);
+    else { this.selected.set(null); if (next === 'pay') this.preparePay(); else this.navigate('home'); }
   }
   async openPayment(payment: Payment): Promise<void> {
     await this.run(async () => { this.selected.set(await api<Payment>(`/payments/${payment.id}`)); this.caseNote = ''; this.caseCategory = payment.status === 'SUCCEEDED' ? 'DISPUTE' : 'TECHNICAL'; });

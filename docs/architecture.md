@@ -110,3 +110,35 @@ H2 mantiene los datos entre reinicios; el build y las pruebas no borran la base 
 Los listados entregan hasta 200 resultados; contactos, hasta 100. El filtrado diario y la analítica se hacen en memoria a partir del store local. No hay promesa de escalabilidad a miles de usuarios concurrentes ni medición de disponibilidad 24x7.
 
 Se prefirió H2 a PostgreSQL para no requerir servicio adicional, un único escritor a coordinación distribuida, polling a WebSocket y políticas deterministas a inferencia no verificable. Antes de múltiples instancias: transacciones/locking verificados en PostgreSQL, migraciones, outbox, reintentos de red y pruebas de carga.
+
+## Evaluación de la experiencia
+
+Revisión del 23 de octubre de 2026 contra la épica y las seis historias de usuario:
+
+| Prioridad | Hallazgo inicial | Adaptación y estado |
+|---|---|---|
+| Crítica para publicar | El acceso por perfil/alias no comprueba identidad; cualquiera con acceso local puede entrar como OPS | Sigue siendo un bloqueo de lanzamiento. El formulario se simplifica, pero no se presenta como autenticación segura. No publicar en Internet |
+| Alta | El pagador elegía si el proveedor aprobaba su pago o su identidad | Cliente sin `scenario` ni `kyc`; el servidor resuelve el resultado local. Inyección explícita bloqueada por defecto con `LAB_DISABLED` |
+| Alta | Iniciar otro pago requería comprender claves y cerrar un intento terminal | Comprobante con acciones de volver o pagar de nuevo. La limpieza del formulario consulta primero el original; un pendiente no se descarta |
+| Media | Comprobantes y ayuda exponían asientos, códigos y vocabulario técnico | Motivos y solicitudes traducidos; ledger y trazas reservados visualmente a OPS; instrucciones distintas para pagador y comercio |
+| Media | La entrada principal era una vitrina de perfiles y mensajes promocionales | Acceso por alias y creación de cuenta como acciones principales; perfiles agrupados como evaluación; registro con datos, consentimiento y resumen |
+| Media | La vista del comercio se perdía al recargar y no admitía reingreso por alias | Selección de vista por rol al iniciar/restaurar sesión y alias habilitado para cada rol |
+
+### Trazabilidad funcional
+
+- W1: tres pasos persistidos, corrección de datos, consentimiento, resumen y activación instrumentada. Ya no se pide al usuario decidir su validación.
+- W2: destinatario, importe, límite y saldo posterior antes de confirmar; resultado, referencia, comprobante y acciones posteriores claras.
+- W3: cobro QR con importe y vencimiento visibles; pendiente no autoriza entrega; actualización asíncrona y filtros por fecha/referencia conservados.
+- W4: clave interna conservada antes del envío, recuperación tras respuesta perdida y una sola afectación financiera. No se elimina para ocultar errores.
+- W5: distinción entre pago no realizado, pendiente y ejecutado; solicitud de devolución sujeta a decisión humana y seguimiento del caso.
+- W6: conciliación diaria, descalces e investigación siguen en el área OPS. Las herramientas de simulación requieren habilitación explícita del laboratorio.
+
+### Frontera de lanzamiento
+
+Esta adaptación es una experiencia de producto sobre integraciones locales, no una habilitación financiera. Antes de usuarios reales se requieren autenticación con prueba de identidad y acceso OPS separado; KYC y consentimiento revisados por cumplimiento; proveedor contractual con callbacks firmados y manejo de estados desconocidos; antifraude, límites ratificados, HTTPS, protección de datos y recuperación operativa. La lectura QR disponible sigue siendo desde PNG, sin cámara ni interoperabilidad bancaria.
+
+Las metas de abandono, onboarding, MAU y CAC son objetivos no acreditados por pruebas funcionales. Requieren cohortes reales, volumen, analítica y seguimiento trimestral. No se inventan resultados de negocio.
+
+### Compatibilidad local
+
+No cambia el esquema ni se borran pagos o saldos. Los nuevos clientes omiten campos de simulación. Para recuperar un intento guardado por la versión anterior que incluya `scenario`, habilitar temporalmente el laboratorio local, consultar el mismo intento y completar su seguimiento antes de volver al modo cliente; no borrar el intento ni enviar otro pago para resolverlo. H2 usa su `DataSource` para funcionar también al reiniciar perfiles de Quarkus.

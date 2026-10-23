@@ -111,7 +111,22 @@ class WalletTest {
         store.tx(c -> { exec(c, "UPDATE sessions SET expires_at=? WHERE token_hash=?", Instant.now().minusSeconds(5).toString(), Wallet.hash(token)); return null; });
         given().cookie("wallet_session", token).get("/api/me").then().statusCode(401).body("code", equalTo("SESSION_EXPIRED"));
     }
-    @Test void approvedPaymentIsAtomicAndReceiptPersists() {
+        @Test void customerPaymentNeedsNoProviderScenarioAndRetriesSafely() {
+        String key = Wallet.id();
+        var body = Map.of("destination", "luis.demo", "amount", 125, "channel", "ALIAS");
+        String reference = given().header("X-Wallet-Request", "1").header("Idempotency-Key", key)
+            .cookie("wallet_session", ana).contentType("application/json").body(body).post("/api/payments")
+            .then().statusCode(200).body("status", equalTo("SUCCEEDED")).extract().path("id");
+        given().header("X-Wallet-Request", "1").header("Idempotency-Key", key)
+            .cookie("wallet_session", ana).contentType("application/json").body(body).post("/api/payments")
+            .then().statusCode(200).body("id", equalTo(reference)).body("duplicate", equalTo(true));
+        assertEquals(49875, balance(ana));
+        String token = wallet.start(new Wallet.OnboardingStart("organico"));
+        identity(token, "customer.demo", "900000019");
+        post("/onboarding/complete", token, Map.of("name", "Persona Sintética", "alias", "customer.demo",
+            "phone", "900000019", "consent", true)).then().statusCode(200).body("status", equalTo("ACTIVE"));
+        }
+        @Test void approvedPaymentIsAtomicAndReceiptPersists() {
         var p = pay("APPROVED", 1234);
         assertEquals("SUCCEEDED", p.get("status"));
         assertEquals(48766, balance(ana));

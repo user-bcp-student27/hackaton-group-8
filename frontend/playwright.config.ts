@@ -15,7 +15,7 @@ export default defineConfig({
   webServer: {
     command: 'java -jar ..\\backend\\target\\quarkus-app\\quarkus-run.jar',
     url: 'http://127.0.0.1:8090/api/health',
-    env: {QUARKUS_HTTP_PORT: '8090', WALLET_DB_URL: 'jdbc:h2:mem:e2e;DB_CLOSE_DELAY=-1'},
+    env: {QUARKUS_HTTP_PORT: '8090', WALLET_DB_URL: 'jdbc:h2:mem:e2e;DB_CLOSE_DELAY=-1', WALLET_LAB_ENABLED: 'true'},
     reuseExistingServer: false,
     timeout: 30000,
   },

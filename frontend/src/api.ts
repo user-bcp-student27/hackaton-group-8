@@ -14,7 +14,7 @@ export async function api<T>(path: string, body?: unknown, headers: Record<strin
     });
   } catch (error) {
     console.error('Wallet network request failed', error);
-    throw new ApiFailure(0, 'NETWORK', 'No se pudo conectar. Si estabas pagando, usa “Consultar mismo intento” antes de iniciar otro.');
+    throw new ApiFailure(0, 'NETWORK', 'No se pudo conectar. Si estabas pagando, usa “Consultar mi pago” antes de enviar otro.');
   }
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {

@@ -1,6 +1,6 @@
 # Inti Wallet · MVP Perú
 
-Wallet web funcional para pagos cotidianos por alias y QR, construida a partir del PDF del reto y las seis historias de [packages](packages).
+Wallet web para pagos cotidianos por alias y QR, orientada al recorrido de pagadores y comercios y alineada con la épica y las seis historias de [packages](packages). La evaluación, trazabilidad y bloqueos para lanzamiento están en [arquitectura](docs/architecture.md#evaluación-de-la-experiencia).
 
 **Solo demostración local. No usar dinero, documentos, celulares, contraseñas ni datos personales reales.** El selector de perfiles y el acceso por alias son identidad **mock**, no autenticación de producción. No exponer el servidor a Internet.
 
@@ -30,7 +30,11 @@ Si `JAVA_HOME` apunta a un JDK antiguo, corrígelo antes de compilar. El script 
 | Café Miraflores | `cafe.demo` | Generar QR, ver intentos y confirmaciones | S/ 500 |
 | Operaciones | `ops.demo` | KYC mock, callbacks, soporte, reversos, conciliación y métricas | Sin fondos |
 
-También puedes crear una wallet con datos inventados. Si el KYC simulado es aprobado, recibe S/ 500 de prueba. Para volver a una cuenta creada, usa **“¿Ya creaste una wallet de prueba?”** e ingresa su alias. No hay contraseña porque la identidad es simulada.
+La primera pantalla permite ingresar por alias o **Crear mi wallet**. Usa `ana.demo`, `luis.demo`, `cafe.demo` u `ops.demo` para evaluar cada rol; los accesos rápidos quedan dentro de **Cuentas de evaluación**. No hay contraseña porque la identidad sigue siendo simulada.
+
+El registro solicita datos ficticios, consentimiento y confirmación. El servidor aplica la respuesta del proveedor local (aprobada por defecto) y concede S/ 500 de prueba una sola vez. El usuario ya no elige resultados de identidad ni del pago. Después de pagar puede volver a su wallet o hacer otro pago; los pendientes conservan la reserva y las respuestas perdidas se recuperan sin duplicar cargos.
+
+El laboratorio está **deshabilitado por defecto**. Solo para pruebas locales de fallas, iniciar con `$env:WALLET_LAB_ENABLED = 'true'`; permite escenarios explícitos en la API y habilita callbacks/fixtures de OPS. La UI de pagador nunca muestra un selector de escenarios. No habilitarlo en una exposición pública. Las pruebas automatizadas configuran su propio laboratorio aislado.
 
 ## Qué está implementado
 
@@ -106,10 +110,10 @@ La construcción se realizó con un asistente de desarrollo: extracción local d
 ## Validar
 
 ```powershell
-# Build integrado + 28 pruebas backend
+# Build integrado + 30 pruebas backend
 .\scripts\build.ps1
 
-# 20 casos de navegador: 10 recorridos en escritorio y móvil
+# 24 casos de navegador: 12 recorridos en escritorio y móvil
 Set-Location frontend
 npm test
 Set-Location ..

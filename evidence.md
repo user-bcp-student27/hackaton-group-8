@@ -8,11 +8,11 @@ Fecha: **23 de octubre de 2026**, entorno Windows local. Resultados de la versi�
 |---|---|
 | Build Angular producción con plantillas estrictas | Correcto |
 | Build Quarkus / Java 21, aplicación integrada | Correcto |
-| Pruebas dominio/API | **28 ejecutadas; 0 fallas; 0 errores; 0 omitidas** |
-| Pruebas Playwright | **20 aprobadas**: 10 recorridos × escritorio y móvil |
+| Pruebas dominio/API | **30 ejecutadas; 0 fallas; 0 errores; 0 omitidas** |
+| Pruebas Playwright | **24 aprobadas**: 12 recorridos × escritorio y móvil |
 | Reinicio abrupto con H2 en archivo | **Aprobado**: sesión, referencia, saldo, ledger e idempotencia conservados |
 | Servidor local | `/api/health` devuelve `UP` en modo `SYNTHETIC_DEMO`; `/` sirve Angular con HTTP 200 |
-| Inspección visual | Aplicación abierta en navegador integrado; dashboard responsive, saldo y navegación renderizados |
+| Inspección visual | Vista previa sin laboratorio en puerto 8085; capturas de dashboard a 1440 × 1000 y 390 × 844, sin desbordamiento horizontal |
 
 ## Comandos reproducibles
 
@@ -24,17 +24,17 @@ Set-Location ..
 .\scripts\test-persistence.ps1
 ```
 
-La última ejecución final del backend terminó a las **11:03** hora Perú:
+La ejecución del backend terminó a las **11:52** hora Perú, con los procesos de prueba en Java 21:
 
 ```text
-Tests run: 28, Failures: 0, Errors: 0, Skipped: 0
+Tests run: 30, Failures: 0, Errors: 0, Skipped: 0
 BUILD SUCCESS
 ```
 
 La última suite final de navegador terminó con:
 
 ```text
-20 passed (45.7s)
+24 passed (54.1s)
 ```
 
 La última prueba de reinicio terminó con:
@@ -77,6 +77,8 @@ El test comprueba saldo de **48,766 céntimos** después de un pago de 1,234, an
 26. Asistente read-only, contexto autorizado y bloqueo de instrucciones.
 27. Cuerpos malformados y fechas inválidas.
 28. Fechas de Perú, referencia, canal y aislamiento de historial.
+29. Pago y onboarding HTTP sin campos de resultado del proveedor; reintento conserva referencia y saldo.
+30. Perfil de cliente sin laboratorio: escenarios, callbacks y fixtures bloqueados; acceso por alias de comercio disponible. Cubierto en [CustomerExperienceTest](backend/src/test/java/pe/wallet/CustomerExperienceTest.java).
 
 Después de cada prueba se verifica suma global del ledger igual a cero y ausencia de saldos negativos fuera de tesorería.
 
@@ -94,6 +96,16 @@ Después de cada prueba se verifica suma global del ledger igual a cero y ausenc
 - Respuesta de pago abortada **después del commit**, recuperación con referencia original.
 - Solicitud y aprobación humana de reverso desde la UI.
 - Tres meses de métricas y atribución por campaña.
+- Volver desde el comprobante y preparar otro pago sin gestionar claves ni cerrar intentos manualmente.
+- Comercio con sesión restaurada, espera de confirmación QR y autorización de entrega solo después del éxito.
+
+## Adaptación a usuario final
+
+La revisión contra las historias, los cambios por prioridad y los bloqueos de lanzamiento están en [arquitectura](docs/architecture.md#evaluación-de-la-experiencia). Se preservaron las invariantes de dominio y se separaron las herramientas de evaluación del recorrido del cliente. Angular compiló después de los últimos cambios de mensajes; el paquete integrado se actualizó antes de la suite final de navegador.
+
+La prueba de persistencia se volvió a ejecutar con el contrato de cliente sin `scenario` y laboratorio deshabilitado por defecto. El servidor de vista previa usa una base separada, `backend/data/customer-preview`, y no modifica la base existente de la demo.
+
+Las pruebas funcionales no acreditan identidad real, interoperabilidad bancaria, seguridad para exposición pública ni las metas de negocio de la épica. El acceso sigue siendo simulado.
 
 ## Iteraciones relevantes
 

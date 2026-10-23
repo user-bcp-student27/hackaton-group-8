@@ -55,7 +55,7 @@ public class Wallet {
     }
 
     Map<String, Object> actor(Connection c, String token) throws SQLException {
-        if (token == null || token.length() > 200) throw new ApiError(401, "SESSION_REQUIRED", "Inicia una sesión de demostración.");
+        if (token == null || token.length() > 200) throw new ApiError(401, "SESSION_REQUIRED", "Ingresa a tu wallet para continuar.");
         Map<String, Object> user = one(c, "SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",
                 hash(token), now());
         if (user == null) throw new ApiError(401, "SESSION_EXPIRED", "Tu sesión expiró. Ingresa nuevamente.");
@@ -119,7 +119,7 @@ public class Wallet {
         require(userId != null && userId.matches("[a-z][a-z0-9.-]{2,49}"), "DEMO_PROFILE", "Elige un perfil o alias de demostración válido.");
         return store.tx(c -> {
             if (Set.of("demo-ana", "demo-luis", "demo-merchant", "demo-ops").contains(userId)) return session(c, userId);
-            Map<String, Object> user = one(c, "SELECT id FROM users WHERE alias=? AND role='PAYER' AND completed_at IS NOT NULL", userId);
+            Map<String, Object> user = one(c, "SELECT id FROM users WHERE alias=? AND completed_at IS NOT NULL", userId);
             if (user == null) throw new ApiError(404, "DEMO_PROFILE", "No encontramos ese alias de prueba. Completa primero el registro.");
             return session(c, text(user.get("id")));
         });
