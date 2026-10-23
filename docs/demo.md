@@ -40,7 +40,7 @@ Esta sección y la siguiente son una evaluación técnica opcional, separada del
 
 1. Mediante la API de laboratorio, crear un pago de S/ 1 con `scenario: "PENDING"` y consultarlo desde Movimientos del pagador.
 2. Mostrar reserva y advertencia de no repetir el pago.
-3. Preguntar a Inti Guía por el resultado. Mostrar que solo explica.
+3. Preguntar a Tilin Guía por el resultado. Mostrar que solo explica.
 4. Ingresar como Operaciones, abrir transacción y el laboratorio del proveedor.
 5. Enviar callback `APPROVED`.
 6. Volver al pagador/comercio: el estado cambia al consultar o dentro de 5 segundos.

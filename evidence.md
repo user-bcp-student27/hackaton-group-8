@@ -1,4 +1,4 @@
-# Evidencia ejecutada · Inti Wallet
+# Evidencia ejecutada · Tilin
 
 Fecha: **23 de octubre de 2026**, entorno Windows local. Resultados de la versión final, no estimaciones ni pruebas pendientes presentadas como éxitos.
 

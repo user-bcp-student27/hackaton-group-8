@@ -1,6 +1,6 @@
 import { AfterViewInit, Directive, ElementRef, HostListener, OnDestroy } from '@angular/core';
 
-@Directive({selector: '[intiDialog]', standalone: true})
+@Directive({selector: '[tilinDialog]', standalone: true})
 export class DialogFocus implements AfterViewInit, OnDestroy {
   private previous: HTMLElement | null = null;
   constructor(private element: ElementRef<HTMLElement>) {}

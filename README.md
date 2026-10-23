@@ -1,4 +1,4 @@
-# Inti Wallet · MVP Perú
+# Tilin · Wallet MVP Perú
 
 Wallet web para pagos cotidianos por alias y QR, orientada al recorrido de pagadores y comercios y alineada con la épica y las seis historias de [packages](packages). La evaluación, trazabilidad y bloqueos para lanzamiento están en [arquitectura](docs/architecture.md#evaluación-de-la-experiencia).
 
@@ -62,7 +62,7 @@ Quarkus 3.27 / Java 21
   |-- Ledger local de doble partida
   |-- Proveedores alias/QR y KYC simulados
   |-- Soporte humano + conciliador + analítica
-  |-- Inti Guía: políticas locales, herramientas de solo lectura
+      |-- Tilin Guía: políticas locales, herramientas de solo lectura
                     |
       H2 2.3.232 en archivo local, JDBC
 ```
@@ -93,7 +93,7 @@ Límites acordados para la demostración:
 
 ## Uso del asistente y de IA en la construcción
 
-**Inti Guía** recibe una consulta y opcionalmente una transacción. Autoriza el acceso, clasifica la intención, consulta el estado real y devuelve una explicación o recomendación de escalamiento. No tiene herramientas de escritura, no interpreta SQL ni cambia saldos.
+**Tilin Guía** recibe una consulta y opcionalmente una transacción. Autoriza el acceso, clasifica la intención, consulta el estado real y devuelve una explicación o recomendación de escalamiento. No tiene herramientas de escritura, no interpreta SQL ni cambia saldos.
 
 Cada consulta genera una traza con versión de política e intención, sin guardar el texto libre en auditoría. La detección de instrucciones sospechosas es una heurística de demostración; la protección efectiva es que el asistente **carece de capacidades financieras** y todas las APIs mantienen sus controles.
 

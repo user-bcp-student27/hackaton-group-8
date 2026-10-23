@@ -9,7 +9,7 @@ type View = 'home' | 'pay' | 'history' | 'merchant' | 'operations' | 'metrics';
 interface Attempt { key: string; input: PaymentInput }
 
 @Component({
-  selector: 'inti-app',
+  selector: 'tilin-app',
   standalone: true,
   imports: [CommonModule, FormsModule, DialogFocus],
   templateUrl: './app.html',
@@ -63,6 +63,11 @@ export class App implements OnInit, OnDestroy {
   agentPaymentId = signal<string | null>(null);
   private poll?: ReturnType<typeof setInterval>;
   private reviewKey: string | null = null;
+
+  private attemptStorageKeys(): string[] {
+    const userId = this.user()?.id;
+    return userId ? [`tilin-attempt-${userId}`, `inti-attempt-${userId}`] : [];
+  }
 
   async ngOnInit(): Promise<void> {
     try {
@@ -228,14 +233,15 @@ export class App implements OnInit, OnDestroy {
         attempt = {key: this.reviewKey ?? crypto.randomUUID(), input: {destination: this.destination, amount: cents(this.amount, this.channel === 'QR' ? 15000 : 20000),
           channel: this.channel, qrId: this.scanned()?.id ?? null}};
         this.attempt.set(attempt);
-        sessionStorage.setItem(`inti-attempt-${this.user()?.id}`, JSON.stringify(attempt));
+        const [storageKey] = this.attemptStorageKeys();
+        if (storageKey) sessionStorage.setItem(storageKey, JSON.stringify(attempt));
       }
       let result: Payment;
       try {
         result = await api<Payment>('/payments', attempt.input, {'Idempotency-Key': attempt.key});
       } catch (error) {
         if (error instanceof ApiFailure && [400, 403, 413, 422].includes(error.status)) {
-          sessionStorage.removeItem(`inti-attempt-${this.user()?.id}`);
+          for (const storageKey of this.attemptStorageKeys()) sessionStorage.removeItem(storageKey);
           this.attempt.set(null);
           this.reviewing.set(false);
         }
@@ -247,7 +253,8 @@ export class App implements OnInit, OnDestroy {
     });
   }
   restoreAttempt(): void {
-    const saved = sessionStorage.getItem(`inti-attempt-${this.user()?.id}`);
+    const keys = this.attemptStorageKeys();
+    const saved = keys.map(key => sessionStorage.getItem(key)).find(value => value !== null);
     if (!saved || this.attempt()) return;
     try {
       const value: unknown = JSON.parse(saved);
@@ -259,6 +266,7 @@ export class App implements OnInit, OnDestroy {
           && 'qrId' in value.input && (value.input.qrId === null || typeof value.input.qrId === 'string')) {
         this.attempt.set({key: value.key, input: {amount: value.input.amount, destination: value.input.destination, channel: value.input.channel,
           ...('scenario' in value.input ? {scenario: value.input.scenario as Outcome} : {}), qrId: value.input.qrId}});
+        if (keys.length && sessionStorage.getItem(keys[0]) === null) sessionStorage.setItem(keys[0], saved);
         this.view.set('pay');
         this.notice.set('Tienes un pago por consultar. Recupera su resultado antes de enviar otro.');
       } else throw new Error('El intento guardado tiene formato inválido. Contacta a operaciones antes de volver a pagar.');
@@ -270,7 +278,7 @@ export class App implements OnInit, OnDestroy {
       if (!attempt) return;
       const result = await api<Payment>('/payments', attempt.input, {'Idempotency-Key': attempt.key});
       if (result.status === 'PENDING') { this.selected.set(await api<Payment>(`/payments/${result.id}`)); throw new Error('Tu pago sigue en proceso. Consulta su estado o solicita ayuda; no lo envíes de nuevo.'); }
-      sessionStorage.removeItem(`inti-attempt-${this.user()?.id}`);
+      for (const storageKey of this.attemptStorageKeys()) sessionStorage.removeItem(storageKey);
       this.attempt.set(null); this.reviewing.set(false); this.amount = ''; this.scanned.set(null); this.channel = 'ALIAS';
       this.reviewKey = null;
       this.selected.set(null); this.view.set(next);
@@ -371,8 +379,8 @@ export class App implements OnInit, OnDestroy {
   }
   downloadReceipt(): void {
     const p = this.selected(); if (!p) return;
-    const content = `INTI WALLET - COMPROBANTE DE DEMOSTRACION\nSIN VALIDEZ FINANCIERA\nReferencia: ${p.id}\nEstado: ${this.status(p.status)}\nPagador: ${p.payer_name}\nDestino: ${p.destination_name}\nMonto: ${this.money(p.amount)}\nCanal: ${p.channel}\nFecha Peru: ${this.date(p.created_at)}\nReverso simulado: ${p.reversed ? 'Si' : 'No'}\n`;
+    const content = `TILIN - COMPROBANTE DE PRUEBA\nSIN VALIDEZ FINANCIERA\nReferencia: ${p.id}\nEstado: ${this.status(p.status)}\nPagador: ${p.payer_name}\nDestino: ${p.destination_name}\nMonto: ${this.money(p.amount)}\nCanal: ${p.channel}\nFecha Peru: ${this.date(p.created_at)}\nReverso simulado: ${p.reversed ? 'Si' : 'No'}\n`;
     const url = URL.createObjectURL(new Blob([content], {type: 'text/plain;charset=utf-8'}));
-    const a = document.createElement('a'); a.href = url; a.download = `inti-${p.id}.txt`; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `tilin-${p.id}.txt`; a.click(); URL.revokeObjectURL(url);
   }
 }

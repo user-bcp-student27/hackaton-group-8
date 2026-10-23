@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "projects": {
-    "inti": {
+    "tilin": {
       "projectType": "application",
       "root": "",
       "sourceRoot": "src",
@@ -13,8 +13,8 @@
             "browser": "src/main.ts",
             "index": "src/index.html",
             "tsConfig": "tsconfig.json",
-            "styles": ["src/styles.css"],
-            "outputPath": "dist/inti",
+            "styles": ["src/styles.css", "src/tilin-theme.css"],
+            "outputPath": "dist/tilin",
             "budgets": [
               {"type": "initial", "maximumWarning": "650kB", "maximumError": "900kB"},
               {"type": "anyComponentStyle", "maximumWarning": "15kB", "maximumError": "20kB"}
@@ -29,8 +29,8 @@
         "serve": {
           "builder": "@angular/build:dev-server",
           "configurations": {
-            "production": {"buildTarget": "inti:build:production"},
-            "development": {"buildTarget": "inti:build:development"}
+            "production": {"buildTarget": "tilin:build:production"},
+            "development": {"buildTarget": "tilin:build:development"}
           },
           "defaultConfiguration": "development"
         }

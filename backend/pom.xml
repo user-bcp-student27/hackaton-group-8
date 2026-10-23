@@ -21,8 +21,8 @@
   <build>
     <resources>
       <resource><directory>src/main/resources</directory></resource>
-      <resource><directory>../frontend/dist/inti/browser</directory><targetPath>META-INF/resources</targetPath></resource>
-      <resource><directory>../frontend/dist/inti</directory><includes><include>3rdpartylicenses.txt</include></includes><targetPath>META-INF/resources</targetPath></resource>
+      <resource><directory>../frontend/dist/tilin/browser</directory><targetPath>META-INF/resources</targetPath></resource>
+      <resource><directory>../frontend/dist/tilin</directory><includes><include>3rdpartylicenses.txt</include></includes><targetPath>META-INF/resources</targetPath></resource>
     </resources>
     <plugins>
     <plugin><groupId>io.quarkus.platform</groupId><artifactId>quarkus-maven-plugin</artifactId><version>${quarkus.platform.version}</version><extensions>true</extensions><executions><execution><goals><goal>build</goal><goal>generate-code</goal><goal>generate-code-tests</goal></goals></execution></executions></plugin>

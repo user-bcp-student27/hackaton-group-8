@@ -3,6 +3,8 @@ import { test, expect, Page, APIRequestContext } from '@playwright/test';
 const headers = {'X-Wallet-Request': '1'};
 async function login(page: Page, name = 'Ana Torres') {
   await page.goto('/');
+  await expect(page).toHaveTitle(/Tilin/);
+  await expect(page.locator('.brand').first()).toContainText('tilin');
   await page.getByText('Cuentas de evaluación', {exact: true}).click();
   await page.getByRole('button', {name: new RegExp(name)}).click();
   await expect(page.getByRole('button', {name: 'Cerrar sesión'})).toBeVisible();
