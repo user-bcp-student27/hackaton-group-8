@@ -441,8 +441,12 @@ export class App implements OnInit, OnDestroy {
     if (this.assistantBusy()) return;
     if (this.selected()) { this.agentPaymentId.set(this.selected()!.id); this.selected.set(null); }
     this.assistantOpen.set(true); this.assistantBusy.set(true); this.error.set('');
-    try { this.agent.set(await api<AgentReply>('/assistant', {message: prompt ?? this.question, paymentId: this.agentPaymentId()})); this.question = ''; }
-    catch (error) { this.handle(error); } finally { this.assistantBusy.set(false); }
+    this.agent.set({
+      message: 'No puedo ayudarte ahora, estoy ocupado :D',
+      intent: 'BUSY', trace_id: 'local', mode: 'LOCAL', human_review_required: false,
+    });
+    this.question = '';
+    this.assistantBusy.set(false);
   }
   downloadReceipt(): void {
     const p = this.selected(); if (!p) return;
