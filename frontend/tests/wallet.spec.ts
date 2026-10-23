@@ -118,7 +118,7 @@ test('W3: generar PNG como comercio, leerlo y pagar como usuario', async ({page}
   await page.getByRole('button', {name: 'Cerrar sesión'}).click();
   await page.getByText('Cuentas de evaluación', {exact: true}).click();
   await page.getByRole('button', {name: /Luis Ramos/}).click();
-  await page.getByLabel('Cargar QR para pagar').setInputFiles({name: 'inti-qr.png', mimeType: 'image/png', buffer: Buffer.from(src!.split(',')[1], 'base64')});
+  await page.getByLabel('Cargar QR para pagar').setInputFiles({name: 'tilin-qr.png', mimeType: 'image/png', buffer: Buffer.from(src!.split(',')[1], 'base64')});
   await expect(page.getByRole('heading', {name: 'QR leído correctamente'})).toBeVisible();
   await expect(page.getByLabel('Destino', {exact: true})).toHaveValue('cafe.demo');
   await expect(page.getByLabel('Monto en soles')).toHaveValue('8.90');
