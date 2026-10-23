@@ -17,6 +17,14 @@ Desde la carpeta del proyecto:
 
 Abrir **http://127.0.0.1:8080**. Un único servidor Quarkus entrega Angular y la API; no necesitas Docker, bancos, claves API ni servicios externos.
 
+Para probar desde un smartphone conectado a la misma red Wi-Fi, detén el servidor local y ejecuta:
+
+```powershell
+.\scripts\start.ps1 -ListenOnLan
+```
+
+El script muestra las direcciones que puedes abrir desde el teléfono. Si Windows Firewall lo solicita, permite el acceso solo en redes privadas. No uses esta opción en redes públicas ni configures reenvío de puertos hacia Internet.
+
 El build restaura las dependencias frontend si no existen, compila Angular en modo producción, ejecuta las pruebas del backend y empaqueta la aplicación. La primera ejecución necesita Internet para las dependencias. La aplicación compilada funciona sin Internet.
 
 Si `JAVA_HOME` apunta a un JDK antiguo, corrígelo antes de compilar. El script no modifica la instalación ni las variables permanentes del equipo.

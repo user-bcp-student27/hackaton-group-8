@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DialogFocus } from './dialog-focus';
-import { api, ApiFailure, cents } from './api';
+import { api, ApiFailure, cents, randomId } from './api';
 import { AgentReply, Audit, Contact, Metrics, Outcome, Payment, PaymentInput, Qr, Reconciliation, SupportCase, User } from './models';
 
 type View = 'home' | 'pay' | 'history' | 'merchant' | 'operations' | 'metrics';
@@ -280,7 +280,7 @@ export class App implements OnInit, OnDestroy {
       if (cents(this.amount, this.channel === 'QR' ? 15000 : 20000) > (this.user()?.balance ?? 0)) throw new Error('Tu saldo disponible no alcanza. Ingresa un monto menor.');
       if (this.channel === 'QR' && !this.scanned()) throw new Error('Selecciona primero la imagen del QR del comercio.');
       await this.run(async () => {
-        this.reviewKey ??= crypto.randomUUID();
+        this.reviewKey ??= randomId();
         await api('/checkout/start', {attemptId: this.reviewKey});
         this.reviewing.set(true);
       });
@@ -294,7 +294,7 @@ export class App implements OnInit, OnDestroy {
     await this.run(async () => {
       let attempt = this.attempt();
       if (!attempt) {
-        attempt = {key: this.reviewKey ?? crypto.randomUUID(), input: {destination: this.destination, amount: cents(this.amount, this.channel === 'QR' ? 15000 : 20000),
+        attempt = {key: this.reviewKey ?? randomId(), input: {destination: this.destination, amount: cents(this.amount, this.channel === 'QR' ? 15000 : 20000),
           channel: this.channel, qrId: this.scanned()?.id ?? null}};
         this.attempt.set(attempt);
         const [storageKey] = this.attemptStorageKeys();
@@ -397,7 +397,7 @@ export class App implements OnInit, OnDestroy {
   async callback(): Promise<void> {
     const p = this.selected(); if (!p) return;
     await this.run(async () => {
-      await api(`/ops/payments/${p.id}/callback`, {eventId: crypto.randomUUID(), outcome: this.callbackOutcome});
+      await api(`/ops/payments/${p.id}/callback`, {eventId: randomId(), outcome: this.callbackOutcome});
       this.selected.set(await api<Payment>(`/payments/${p.id}`)); await this.loadData(); this.notice.set('Callback mock aplicado.');
     });
   }
